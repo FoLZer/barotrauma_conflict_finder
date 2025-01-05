@@ -1,8 +1,8 @@
 use roxmltree::Node;
 
 use crate::{
-    shared::{prefabs::wreck_ai_config::WreckAIConfig, util::Overridable},
     shared::util::XmlContentFile,
+    shared::{prefabs::wreck_ai_config::WreckAIConfig, util::Overridable},
 };
 
 #[derive(Debug)]

@@ -74,6 +74,7 @@ pub mod subtract_component;
 pub mod terminal;
 pub mod throwable;
 pub mod trigger_component;
+pub mod trigonometric_function_component;
 pub mod turret;
 pub mod vent;
 pub mod water_detector;
@@ -81,7 +82,6 @@ pub mod wearable;
 pub mod wifi;
 pub mod wire;
 pub mod xor_component;
-pub mod trigonometric_function_component;
 
 use adder_component::AdderComponent;
 use and_component::AndComponent;
@@ -372,7 +372,8 @@ impl ItemComponents {
             }
             "TrigonometricFunctionComponent" => {
                 assert!(self.trigonometric_function_component.is_none());
-                self.trigonometric_function_component = Some(TrigonometricFunctionComponent::from_xml(element));
+                self.trigonometric_function_component =
+                    Some(TrigonometricFunctionComponent::from_xml(element));
             }
             "Holdable" => {
                 assert!(self.holdable.is_none());

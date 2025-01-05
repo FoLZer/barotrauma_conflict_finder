@@ -1,8 +1,8 @@
 use roxmltree::Node;
 
 use crate::{
-    shared::{prefabs::factions::FactionPrefab, util::Overridable},
     shared::util::XmlContentFile,
+    shared::{prefabs::factions::FactionPrefab, util::Overridable},
 };
 
 #[derive(Debug)]

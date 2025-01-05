@@ -55,4 +55,3 @@ impl<T> PrefabWithKey<T> {
 pub trait XmlContentFile {
     fn from_xml(element: Node) -> Self;
 }
-

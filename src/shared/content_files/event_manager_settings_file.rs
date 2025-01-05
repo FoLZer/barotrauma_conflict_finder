@@ -1,8 +1,8 @@
 use roxmltree::Node;
 
 use crate::{
-    shared::{prefabs::event_manager_settings::EventManagerSettings, util::Overridable},
     shared::util::XmlContentFile,
+    shared::{prefabs::event_manager_settings::EventManagerSettings, util::Overridable},
 };
 
 #[derive(Debug)]

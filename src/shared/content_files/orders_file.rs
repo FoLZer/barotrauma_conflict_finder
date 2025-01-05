@@ -1,11 +1,11 @@
 use roxmltree::Node;
 
 use crate::{
+    shared::util::XmlContentFile,
     shared::{
         prefabs::order_prefab::{OrderCategoryIcon, OrderPrefab},
         util::Overridable,
     },
-    shared::util::XmlContentFile,
 };
 
 #[derive(Debug)]

@@ -1,9 +1,7 @@
 use glam::Vec2;
 use roxmltree::Node;
 
-use crate::shared::{
-    prefabs::level_object_prefab::Attack, submarine_info::Vector2, util::NodeExp,
-};
+use crate::shared::{prefabs::level_object_prefab::Attack, submarine_info::Vector2, util::NodeExp};
 
 use super::powered::PoweredComponent;
 

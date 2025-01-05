@@ -40,10 +40,9 @@ impl StatusHUDComponent {
             show_texts: element
                 .attribute_ignore_ascii_case("showtexts")
                 .map_or(true, |v| v.parse().unwrap()),
-            overlay_color: element.attribute_ignore_ascii_case("overlaycolor").map_or(
-                "72,119,72,120".parse().unwrap(),
-                |v| v.parse().unwrap(),
-            ),
+            overlay_color: element
+                .attribute_ignore_ascii_case("overlaycolor")
+                .map_or("72,119,72,120".parse().unwrap(), |v| v.parse().unwrap()),
         }
     }
 }

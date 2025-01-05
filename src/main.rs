@@ -39,14 +39,14 @@ macro_rules! detect_conflict {
                         } else {
                             if !item.is_override {
                                 log::error!(
-                                    "{} id {} was already defined and this mod declares it but doesn't override!",
+                                    "[{}] id {} was already defined and this mod declares it but doesn't override!",
                                     $item_name, identifier
                                 );
                                 continue;
                             } else {
                                 occupied_entry.get_mut().was_overriden = true;
                                 trace!(
-                                    "{} id {} is overriden by this mod",
+                                    "[{}] id {} is overriden by this mod",
                                     $item_name, identifier
                                 );
                             }
@@ -74,28 +74,42 @@ fn main() {
 
     std::env::set_current_dir(&args.game_path).unwrap();
 
+    if !config_player_path.exists() {
+        log::error!(
+            "config_player.xml was not found, try checking your game_path argument or provide a custom config_player_path argument"
+        );
+        return;
+    }
+
     let player_config = PlayerConfigFile::from_xml(
-        Document::parse(&std::fs::read_to_string(config_player_path).unwrap())
-            .unwrap()
-            .root_element(),
+        Document::parse(
+            &std::fs::read_to_string(config_player_path).expect("Failed to read config_player.xml"),
+        )
+        .expect("Failed to parse config_player.xml")
+        .root_element(),
     );
 
+    info!("Reading all installed workshop mods...");
     let installed_packages = {
         let mut v = Vec::new();
         let workshop_folder_path = BaseDirs::new()
-            .unwrap()
+            .expect("Failed to retrieve mods folder")
             .data_local_dir()
             .join("Daedalic Entertainment GmbH/Barotrauma/WorkshopMods/Installed");
-        for entry in std::fs::read_dir(workshop_folder_path).unwrap() {
+        info!("Workshop folder path: {}", workshop_folder_path.display());
+        for entry in std::fs::read_dir(workshop_folder_path)
+            .expect("Failed to read mods folder (probably doesn't exist)")
+        {
             let entry = entry.unwrap();
             let path = entry.path();
             if !path.is_dir() {
                 continue;
             }
             let file_list_path = path.join("filelist.xml");
-            let package =
-                ContentPackage::<Regular>::load(&std::fs::read_to_string(&file_list_path).unwrap())
-                    .unwrap();
+            let package = ContentPackage::<Regular>::load(
+                &std::fs::read_to_string(&file_list_path).expect("Failed to read filelist.xml"),
+            )
+            .expect("Failed to parse filelist.xml");
             v.push((package, path));
         }
         v
@@ -106,9 +120,10 @@ fn main() {
     let mut loaded_content_files = Vec::new();
 
     let core_package = ContentPackage::<Core>::load(
-        &std::fs::read_to_string(&player_config.content_packages.core_package.path).unwrap(),
+        &std::fs::read_to_string(&player_config.content_packages.core_package.path)
+            .expect("Failed to read filelist.xml"),
     )
-    .unwrap();
+    .expect("Failed to parse filelist.xml");
     let core_package_files = core_package.load_file_list(
         &std::path::absolute(&player_config.content_packages.core_package.path)
             .unwrap()
