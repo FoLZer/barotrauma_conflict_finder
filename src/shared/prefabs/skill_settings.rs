@@ -58,4 +58,8 @@ impl SkillSettings {
                 .map_or(200.0, |v| v.parse().unwrap()),
         }
     }
+
+    pub fn get_identifier(&self) -> &str {
+        "SkillSettings"
+    }
 }

@@ -56,6 +56,10 @@ impl SoundPrefab {
             source_pool_index,
         }
     }
+
+    pub fn get_identifier(&self) -> &str {
+        &self.identifier
+    }
 }
 
 #[derive(Debug)]
@@ -84,6 +88,10 @@ impl DamageSoundPrefab {
                 .attribute_ignore_ascii_case("requiredtag")
                 .map(|v| v.to_owned()),
         }
+    }
+
+    pub fn get_identifier(&self) -> &str {
+        &self.sound_prefab.identifier
     }
 }
 
@@ -127,6 +135,10 @@ impl BackgroundMusicPrefabs {
                 .map_or(false, |v| v.parse().unwrap()),
         }
     }
+
+    pub fn get_identifier(&self) -> &str {
+        &self.sound_prefab.identifier
+    }
 }
 
 #[derive(Debug)]
@@ -143,6 +155,10 @@ impl GUISoundPrefab {
                 .attribute_ignore_ascii_case("guisoundtype")
                 .map_or(GUISoundType::UIMessage, |v| v.parse().unwrap()),
         }
+    }
+
+    pub fn get_identifier(&self) -> &str {
+        &self.sound_prefab.identifier
     }
 }
 

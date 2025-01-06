@@ -885,6 +885,10 @@ impl CorpsePrefab {
             human_prefab: HumanPrefab::new(element, None),
         }
     }
+
+    pub fn get_identifier(&self) -> &str {
+        &self.human_prefab.identifier
+    }
 }
 
 #[bitfield(u16)]

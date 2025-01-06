@@ -4,6 +4,7 @@ use crate::shared::util::NodeExp;
 
 #[derive(Debug)]
 pub struct WreckAIConfig {
+    pub identifier: String,
     pub defensive_agent: Option<String>,
     pub offensive_agent: Option<String>,
     pub brain: Option<String>,
@@ -32,6 +33,10 @@ pub struct WreckAIConfig {
 impl WreckAIConfig {
     pub fn new(element: Node) -> Self {
         Self {
+            identifier: element
+                .attribute_ignore_ascii_case("Entity")
+                .map(|v| v.to_owned())
+                .unwrap(),
             defensive_agent: element
                 .attribute_ignore_ascii_case("defensiveagent")
                 .map(|v| v.to_owned()),

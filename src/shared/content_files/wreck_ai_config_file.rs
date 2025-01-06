@@ -1,13 +1,10 @@
 use roxmltree::Node;
 
-use crate::{
-    shared::util::XmlContentFile,
-    shared::{prefabs::wreck_ai_config::WreckAIConfig, util::Overridable},
-};
+use crate::shared::{prefabs::wreck_ai_config::WreckAIConfig, util::{Overridable, PrefabWithKey, XmlContentFile}};
 
 #[derive(Debug)]
 pub struct WreckAIConfigFile {
-    pub wreck_ai_configs: Vec<Overridable<WreckAIConfig>>,
+    pub wreck_ai_configs: Vec<Overridable<PrefabWithKey<WreckAIConfig>>>,
 }
 
 impl WreckAIConfigFile {
@@ -44,8 +41,9 @@ impl WreckAIConfigFile {
             //    content_package_index: todo!(),
             //});
         } else if Self::matches_singular(elem_name) {
+            let p = WreckAIConfig::new(element);
             self.wreck_ai_configs.push(Overridable {
-                value: WreckAIConfig::new(element),
+                value: PrefabWithKey::new(&p.identifier.clone(), p),
                 is_override: overriding,
             });
         } else if Self::matches_plural(elem_name) {

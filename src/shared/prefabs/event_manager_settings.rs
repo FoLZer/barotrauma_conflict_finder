@@ -45,4 +45,8 @@ impl EventManagerSettings {
             freeze_duration_when_crew_away,
         }
     }
+
+    pub fn get_identifier(&self) -> &str {
+        &self.identifier
+    }
 }

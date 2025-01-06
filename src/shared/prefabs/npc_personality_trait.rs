@@ -35,4 +35,8 @@ impl NPCPersonalityTrait {
             commonness,
         }
     }
+
+    pub fn get_identifier(&self) -> &str {
+        &self.identifier
+    }
 }

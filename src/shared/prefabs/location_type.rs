@@ -277,6 +277,10 @@ impl LocationType {
             requested_goods_count,
         }
     }
+
+    pub fn get_identifier(&self) -> &str {
+        &self.identifier
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

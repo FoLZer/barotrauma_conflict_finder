@@ -47,6 +47,10 @@ impl UpgradeCategory {
             name_identifier,
         }
     }
+
+    pub fn get_identifier(&self) -> &str {
+        &self.identifier
+    }
 }
 
 #[derive(Debug)]
@@ -155,6 +159,10 @@ impl UpgradePrefab {
             sprite,
             target_properties,
         }
+    }
+
+    pub fn get_identifier(&self) -> &str {
+        &self.identifier
     }
 }
 

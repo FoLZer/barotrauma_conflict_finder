@@ -32,6 +32,10 @@ impl ItemRepairPriority {
             priority,
         }
     }
+
+    pub fn get_identifier(&self) -> &str {
+        &self.identifier
+    }
 }
 
 #[derive(Debug)]
@@ -190,6 +194,10 @@ impl JobPrefab {
             icon,
             icon_small,
         }
+    }
+
+    pub fn get_identifier(&self) -> &str {
+        &self.identifier
     }
 }
 

@@ -144,6 +144,10 @@ impl OutpostGenerationParams {
             human_prefab_collections,
         }
     }
+
+    pub fn get_identifier(&self) -> &str {
+        &self.identifier
+    }
 }
 
 #[derive(Debug)]
@@ -194,5 +198,9 @@ impl RuinGenerationParams {
                 .attribute_ignore_ascii_case("ismissionready")
                 .map_or(true, |v| v.parse().unwrap()),
         }
+    }
+
+    pub fn get_identifier(&self) -> &str {
+        &self.outpost_generation_params.identifier
     }
 }

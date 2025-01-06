@@ -8,6 +8,7 @@ use super::item_prefab::{BarotraumaSprite, Color, DoesNotExistError};
 
 #[derive(Debug)]
 pub struct OrderCategoryIcon {
+    pub identifier: String,
     pub category: OrderCategory,
     pub sprite: BarotraumaSprite,
     pub color: Color,
@@ -15,10 +16,11 @@ pub struct OrderCategoryIcon {
 
 impl OrderCategoryIcon {
     pub fn new(element: Node) -> Self {
-        let category = element
+        let identifier = element
             .attribute_ignore_ascii_case("category")
-            .map(|v| v.parse::<OrderCategory>().unwrap())
+            .map(|v| v.to_owned())
             .unwrap();
+        let category = identifier.parse().unwrap();
         let sprite = BarotraumaSprite::new(
             element
                 .children()
@@ -37,10 +39,15 @@ impl OrderCategoryIcon {
         );
 
         Self {
+            identifier,
             category,
             sprite,
             color,
         }
+    }
+
+    pub fn get_identifier(&self) -> &str {
+        &self.identifier
     }
 }
 
@@ -261,5 +268,9 @@ impl OrderPrefab {
             symbol_sprite,
             option_sprites,
         }
+    }
+
+    pub fn get_identifier(&self) -> &str {
+        &self.identifier
     }
 }

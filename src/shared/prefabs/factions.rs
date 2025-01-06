@@ -122,6 +122,10 @@ impl FactionPrefab {
             automatic_missions,
         }
     }
+
+    pub fn get_identifier(&self) -> &str {
+        &self.identifier
+    }
 }
 
 #[derive(Debug)]

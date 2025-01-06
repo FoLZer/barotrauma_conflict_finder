@@ -27,7 +27,7 @@ struct Args {
 }
 
 macro_rules! detect_conflict {
-    ($item_name: literal, $id_map: ident, $content_file: expr, $overridable_field: ident) => {
+    ($item_name: literal, $id_map: ident, $content_file: expr, $overridable_field: ident, $package_id: ident) => {
         for item_file in &$content_file {
             for item in &item_file.$overridable_field {
                 let identifier = &item.value.get_identifier();
@@ -35,6 +35,7 @@ macro_rules! detect_conflict {
                     std::collections::hash_map::Entry::Occupied(mut occupied_entry) => {
                         if occupied_entry.get().was_overriden {
                             log::error!("Item id {} is already loaded!", identifier);
+                            occupied_entry.get_mut().added_by.push($package_id.clone());
                             continue;
                         } else {
                             if !item.is_override {
@@ -42,9 +43,14 @@ macro_rules! detect_conflict {
                                     "[{}] id {} was already defined and this mod declares it but doesn't override!",
                                     $item_name, identifier
                                 );
+                                occupied_entry.get_mut().added_by.push($package_id.clone());
+
                                 continue;
                             } else {
-                                occupied_entry.get_mut().was_overriden = true;
+                                let e = occupied_entry.get_mut();
+                                e.was_overriden = true;
+                                e.added_by.push($package_id.clone());
+
                                 trace!(
                                     "[{}] id {} is overriden by this mod",
                                     $item_name, identifier
@@ -55,6 +61,7 @@ macro_rules! detect_conflict {
                     std::collections::hash_map::Entry::Vacant(vacant_entry) => {
                         vacant_entry.insert(IdCheck {
                             was_overriden: false,
+                            added_by: vec![$package_id.clone()]
                         });
                     }
                 }
@@ -178,23 +185,35 @@ fn main() {
                 }
             )*
             for (package, content_files) in &loaded_content_files {
+                let package_id = package
+                    .name()
+                    .clone()
+                    .unwrap_or_else(|| package.steam_workshop_id().unwrap().to_string());
                 info!(
                     "Loading package {}",
-                    package
-                        .name()
-                        .clone()
-                        .unwrap_or_else(|| package.steam_workshop_id().unwrap().to_string())
+                    package_id
                 );
                 $(
                     paste! {
-                        detect_conflict!($item_name, [<loaded_ $content_file _ $overridable_field _ids>], content_files.$content_file, $overridable_field);
+                        detect_conflict!($item_name, [<loaded_ $content_file _ $overridable_field _ids>], content_files.$content_file, $overridable_field, package_id);
                     }
                 )*
             }
+            log::info!("------Conflicts------");
+            $(
+                paste! {
+                    for (id, entry) in &[<loaded_ $content_file _ $overridable_field _ids>] {
+                        if entry.added_by.len() > 2 {
+                            log::error!("{}: {} is defined by: {:?}", $item_name, id, entry.added_by);
+                        }
+                    }
+                }
+            )*
         };
     }
 
     //TODO: Text conflicts
+    //TODO: skill_settings conflicts
 
     detect_conflict_loop!(
         "Item", items, items;
@@ -215,12 +234,37 @@ fn main() {
         "Random Event Prefabs", random_events, event_prefabs;
         "Random Event Sprites", random_events, event_sprites;
         "Random Event Sets", random_events, event_sets;
-        "Structure Prefabs", structures, prefabs
-        //TODO: everything else
-
+        "Structure Prefabs", structures, prefabs;
+        //TODO: ui_styles
+        "Upgrade Modules Categories", upgrade_modules, categories;
+        "Upgrade Modules Prefabs", upgrade_modules, prefabs;
+        "Ruin Generation Parameters", ruin_configs, ruin_generation_params;
+        "Outpost Generation Parameters", outpost_configs, outpost_generation_params;
+        "Wreck AI Configs", wreck_ai_configs, wreck_ai_configs;
+        //"Map Generation Parameters", map_generation_params, map_generation_params; TODO: these identifiers are based on file location, not implemented yet
+        "Cave Generation Parameters", cave_generation_params, cave_generation_params;
+        "Particle Prefabs", particle_prefabs, particle_prefabs;
+        "Event Manager Settings", event_manager_settings, event_manager_settings;
+        "NPC Personality Traits", npc_personality_traits, npc_personality_traits;
+        "Item Repair Priorities", jobs, item_repair_priorities;
+        "Jobs", jobs, jobs;
+        "Corpse Prefabs", corpse_prefabs, corpse_prefabs;
+        //"Sound Prefabs", sound_prefabs, sound_prefabs; TODO: not entirely correct identifier yet
+        "Damage Sound Prefabs", sound_prefabs, damage_sound_prefabs;
+        "Background Music Prefabs", sound_prefabs, background_music_prefabs;
+        "GUI Sound Prefabs", sound_prefabs, gui_sound_prefabs;
+        //"Grime Decals Sprites", decal_prefabs, grime_sprites; TODO: based on index in file, not implemented yet
+        "Decal Prefabs", decal_prefabs, decal_prefabs;
+        "Location Types", location_types, location_types;
+        "Mission Prefabs", mission_prefabs, mission_prefabs;
+        "Order Prefabs", order_prefabs, order_prefabs;
+        "Order Category Icons", order_prefabs, order_category_icons;
+        "Faction Prefabs", faction_prefabs, faction_prefabs;
+        "Tutorial Prefabs", tutorial_prefabs, tutorial_prefabs
     );
 }
 
 struct IdCheck {
     pub was_overriden: bool,
+    pub added_by: Vec<String>,
 }

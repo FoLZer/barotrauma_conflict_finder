@@ -269,6 +269,10 @@ impl ParticlePrefab {
             sub_emitters,
         }
     }
+
+    pub fn get_identifier(&self) -> &str {
+        &self.identifier
+    }
 }
 
 #[derive(Debug)]
