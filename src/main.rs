@@ -17,7 +17,7 @@ use iced::{
     Element, Subscription, Task,
     futures::{SinkExt, Stream, StreamExt, channel::mpsc::UnboundedReceiver, lock::Mutex},
     stream,
-    widget::{button, column, container, radio, row, text, text_editor, text_input},
+    widget::{button, column, container, radio, row, scrollable, text, text_editor, text_input},
 };
 use log::{info, trace, warn};
 use logger::SimpleLogger;
@@ -96,8 +96,9 @@ pub enum Message {
     ScreenChanged(Screen),
     GamePathChanged(String),
     ConfigPathChanged(String),
-    StartParsing,
     LogMessage(String),
+    LogScreenAction(text_editor::Action),
+    StartParsing,
     StartParsing2,
 }
 
@@ -165,7 +166,9 @@ impl App {
                     .into()
                 }
                 Screen::Logs => {
-                    text_editor(&self.logs).into()
+                    text_editor(&self.logs)
+                        .on_action(Message::LogScreenAction)
+                        .into()
                 }
             })
         ]
@@ -189,6 +192,18 @@ impl App {
                         Arc::new(format!("{}\n", s)),
                     )));
             }
+            //Used to allow user to copy from log screen but not edit
+            Message::LogScreenAction(action) => match &action {
+                text_editor::Action::Move(_) => self.logs.perform(action),
+                text_editor::Action::Select(_) => self.logs.perform(action),
+                text_editor::Action::SelectWord => self.logs.perform(action),
+                text_editor::Action::SelectLine => self.logs.perform(action),
+                text_editor::Action::SelectAll => self.logs.perform(action),
+                text_editor::Action::Edit(_) => (),
+                text_editor::Action::Click(_) => self.logs.perform(action),
+                text_editor::Action::Drag(_) => self.logs.perform(action),
+                text_editor::Action::Scroll { .. } => self.logs.perform(action),
+            },
             Message::StartParsing => {
                 return Task::done(Message::ScreenChanged(Screen::Logs))
                     .chain(Task::done(Message::StartParsing2));
