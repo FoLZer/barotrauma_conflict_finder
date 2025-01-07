@@ -67,6 +67,46 @@ impl SimpleLogger {
         }
     }
 
+    /// Override the log level for some specific modules.
+    ///
+    /// This sets the log level of a specific module and all its sub-modules.
+    /// When both the level for a parent module as well as a child module are set,
+    /// the more specific value is taken. If the log level for the same module is
+    /// specified twice, the resulting log level is implementation defined.
+    ///
+    /// # Examples
+    ///
+    /// Silence an overly verbose crate:
+    ///
+    /// ```no_run
+    /// use simple_logger::SimpleLogger;
+    /// use log::LevelFilter;
+    ///
+    /// SimpleLogger::new().with_module_level("chatty_dependency", LevelFilter::Warn).init().unwrap();
+    /// ```
+    ///
+    /// Disable logging for all dependencies:
+    ///
+    /// ```no_run
+    /// use simple_logger::SimpleLogger;
+    /// use log::LevelFilter;
+    ///
+    /// SimpleLogger::new()
+    ///     .with_level(LevelFilter::Off)
+    ///     .with_module_level("my_crate", LevelFilter::Info)
+    ///     .init()
+    ///     .unwrap();
+    /// ```
+    //
+    // This method *must* sort `module_levels` for the [`enabled`](#method.enabled) method to work correctly.
+    #[must_use = "You must call init() to begin logging"]
+    pub fn with_module_level(mut self, target: &str, level: LevelFilter) -> SimpleLogger {
+        self.module_levels.push((target.to_string(), level));
+        self.module_levels
+            .sort_by_key(|(name, _level)| name.len().wrapping_neg());
+        self
+    }
+
     /// Configure the logger
     pub fn max_level(&self) -> LevelFilter {
         let max_level = self
@@ -100,7 +140,6 @@ impl Log for SimpleLogger {
                 .find(|(name, _level)| metadata.target().starts_with(name))
                 .map(|(_name, level)| level)
                 .unwrap_or(&self.default_level)
-            && metadata.target() == "barotrauma_conflict_finder"
     }
 
     fn log(&self, record: &Record) {
@@ -187,6 +226,8 @@ impl Log for SimpleLogger {
                 thread,
                 record.args()
             );
+
+            println!("{}", message);
 
             self.tx.lock().unwrap().unbounded_send(message).unwrap();
         }
