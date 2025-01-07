@@ -12,11 +12,15 @@ use iced::{
     Element, Subscription, Task,
     futures::{SinkExt, Stream, StreamExt, channel::mpsc::UnboundedReceiver, lock::Mutex},
     stream,
-    widget::{button, column, container, radio, row, text, text_editor, text_input},
+    widget::{
+        Column, button, column, container, pick_list, radio, row, scrollable, text, text_editor,
+        text_input,
+    },
 };
-use loading::LoadingState;
+use loading::{ConflictType, LoadingState};
 use log::LevelFilter;
 use logger::SimpleLogger;
+use strum::IntoEnumIterator;
 
 #[derive(Parser)]
 struct Args {
@@ -49,6 +53,7 @@ pub enum Message {
     LogScreenAction(text_editor::Action),
     StartParsing,
     LoadProgress(Result<loading::Progress, ()>),
+    ConflictTypeSelected(ConflictType),
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
@@ -71,6 +76,7 @@ struct App {
     pub logger_rx: Arc<Mutex<UnboundedReceiver<String>>>,
 
     pub loading_state: Option<LoadingState>,
+    pub selected_conflict_type: ConflictType,
 }
 
 impl App {
@@ -95,8 +101,30 @@ impl App {
                     Screen::Logs,
                     Some(self.screen),
                     Message::ScreenChanged
-                )
-            ],
+                ),
+            ]
+            .push_maybe(
+                self.loading_state
+                    .as_ref()
+                    .filter(|v| !matches!(v, LoadingState::Finished(_)))
+                    .map(|_| radio(
+                        "Loading",
+                        Screen::LoadingMods,
+                        Some(self.screen),
+                        Message::ScreenChanged,
+                    ))
+            )
+            .push_maybe(
+                self.loading_state
+                    .as_ref()
+                    .filter(|v| matches!(v, LoadingState::Finished(_)))
+                    .map(|_| radio(
+                        "Conflict Solver",
+                        Screen::ConflictSolver,
+                        Some(self.screen),
+                        Message::ScreenChanged,
+                    ))
+            ),
             //Main view
             container(match self.screen {
                 Screen::Main => {
@@ -120,10 +148,9 @@ impl App {
                     .into()
                 }
                 Screen::Logs => {
-                    text!("Todo").into()
-                    //text_editor(&self.logs)
-                    //    .on_action(Message::LogScreenAction)
-                    //    .into()
+                    text_editor(&self.logs)
+                        .on_action(Message::LogScreenAction)
+                        .into()
                 }
                 Screen::LoadingMods => {
                     column![
@@ -137,7 +164,7 @@ impl App {
                                     text!("Loading: Loading Mods: {} / {}", i, max),
                                 LoadingState::LoadingConflicts =>
                                     text!("Loading: Loading Conflicts"),
-                                LoadingState::Finished => text!("Loading: Finished!"),
+                                LoadingState::Finished(_) => text!("Loading: Finished!"),
                             },
                             None => text!("Loading: Error: Not currently loading anything"),
                         },
@@ -146,7 +173,26 @@ impl App {
                     .into()
                 }
                 Screen::ConflictSolver => {
-                    text!("Todo").into()
+                    let Some(LoadingState::Finished(conflicts)) = &self.loading_state else {
+                        return text!("Error! No loaded mods!").into();
+                    };
+                    let selected_conflicts =
+                        self.selected_conflict_type.get_conflict_by_type(conflicts);
+                    row![container(column![
+                        pick_list(
+                            ConflictType::iter()
+                                .filter(|t| !t.get_conflict_by_type(conflicts).is_empty())
+                                .collect::<Vec<_>>(),
+                            Some(self.selected_conflict_type),
+                            Message::ConflictTypeSelected
+                        ),
+                        scrollable(Column::with_children(selected_conflicts.iter().map(
+                            |(identifier, _)| {
+                                Into::<Element<'_, Message>>::into(text!("{}", identifier))
+                            }
+                        )))
+                    ])]
+                    .into()
                 }
             })
         ]
@@ -200,6 +246,7 @@ impl App {
                     return Task::done(Message::ScreenChanged(Screen::Logs));
                 }
             },
+            Message::ConflictTypeSelected(t) => self.selected_conflict_type = t,
         }
         Task::none()
     }
@@ -242,6 +289,7 @@ fn main() -> iced::Result {
                 logs: Default::default(),
                 logger_rx,
                 loading_state: Default::default(),
+                selected_conflict_type: ConflictType::Item,
             };
             (state, Task::none())
         })

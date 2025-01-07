@@ -20,6 +20,7 @@ log = "*"
 simple_logger = "*"
 paste = "*"
 iced = "0.13.1"
+strum = { version = "*", features = ["derive"] }
 
 #remove in future, used in EventSet to determine an identifier until it's been implemented
 rand = "*"
