@@ -1,6 +1,9 @@
 use roxmltree::Node;
 
-use crate::shared::{prefabs::wreck_ai_config::WreckAIConfig, util::{Overridable, PrefabWithKey, XmlContentFile}};
+use crate::shared::{
+    prefabs::wreck_ai_config::WreckAIConfig,
+    util::{Overridable, PrefabWithKey, XmlContentFile},
+};
 
 #[derive(Debug)]
 pub struct WreckAIConfigFile {
