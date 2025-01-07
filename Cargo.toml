@@ -1,26 +1,3 @@
-[package]
-name = "barotrauma_conflict_finder"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-clap = { version = "*", features = ["derive"] }
-roxmltree = "*"
-md-5 = "*"
-chrono = "*"
-bitfield-struct = "*"
-glam = "*"
-lazy_static = "*"
-derive_builder = "*"
-thiserror = "*"
-flate2 = "*"
-directories = "*"
-regex = "*"
-log = "*"
-simple_logger = "*"
-paste = "*"
-iced = "0.13.1"
-strum = { version = "*", features = ["derive"] }
-
-#remove in future, used in EventSet to determine an identifier until it's been implemented
-rand = "*"
+[workspace]
+members = ["app", "asset_parser"]
+resolver = "3"

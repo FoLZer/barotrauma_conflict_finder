@@ -1,0 +1,8 @@
+[build]
+rustflags = ["-C", "link-arg=-fuse-ld=lld", "-Z", "threads=8"]
+
+[unstable]
+codegen-backend = true
+
+[profile.dev]
+codegen-backend = "cranelift"

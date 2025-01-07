@@ -17,15 +17,11 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-pub mod content_file;
-pub mod content_package;
-pub mod loading;
 pub mod logger;
-pub mod player_config;
-pub mod shared;
 
 use std::{path::PathBuf, sync::Arc};
 
+use asset_parser::loading::{ConflictType, LoadingState};
 use clap::Parser;
 use iced::{
     Element, Subscription, Task,
@@ -36,7 +32,6 @@ use iced::{
         text_input,
     },
 };
-use loading::{ConflictType, LoadingState};
 use log::LevelFilter;
 use logger::SimpleLogger;
 use strum::IntoEnumIterator;
@@ -71,7 +66,7 @@ pub enum Message {
     LogMessage(String),
     LogScreenAction(text_editor::Action),
     StartParsing,
-    LoadProgress(Result<loading::Progress, ()>),
+    LoadProgress(Result<asset_parser::loading::Progress, ()>),
     ConflictTypeSelected(ConflictType),
 }
 
@@ -249,7 +244,7 @@ impl App {
 
                 self.loading_state = Some(LoadingState::Started);
 
-                let task = Task::stream(loading::load(game_path, config_player_path));
+                let task = Task::stream(asset_parser::loading::load(game_path, config_player_path));
 
                 return Task::done(Message::ScreenChanged(Screen::LoadingMods))
                     .chain(task.map(|progress| Message::LoadProgress(progress)))

@@ -1,0 +1,24 @@
+[package]
+name = "asset_parser"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+roxmltree = "*"
+regex = "*"
+log = "*"
+flate2 = "*"
+md-5 = "*"
+thiserror = "*"
+paste = "*"
+iced = "0.13.1"
+strum = { version = "*", features = ["derive"] }
+directories = "*"
+bitfield-struct = "*"
+glam = "*"
+chrono = "*"
+lazy_static = "*"
+derive_builder = "*"
+
+#remove in future, used in EventSet to determine an identifier until it's been implemented
+rand = "*"

@@ -1,0 +1,11 @@
+[package]
+name = "barotrauma_conflict_finder"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "*", features = ["derive"] }
+log = { version = "*", features = ["std"] }
+iced = "0.13.1"
+strum = { version = "*", features = ["derive"] }
+asset_parser = { path = "../asset_parser" }

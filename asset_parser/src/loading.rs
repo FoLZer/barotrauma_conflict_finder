@@ -13,8 +13,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::content_package::{AnyContentPackage, ContentPackage, Core, Regular};
-use crate::player_config::PlayerConfigFile;
+use crate::{content_package::{AnyContentPackage, ContentPackage, Core, Regular}, player_config::PlayerConfigFile};
 
 macro_rules! detect_conflict {
     ($item_name: literal, $id_map: expr, $content_file: expr, $overridable_field: ident, $package_id: ident) => {
