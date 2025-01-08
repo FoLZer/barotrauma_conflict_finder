@@ -7,13 +7,24 @@ use roxmltree::Document;
 use crate::shared::{content_files::submarine_file::SubmarineFile, util::XmlContentFile};
 
 #[derive(Debug)]
-pub struct ContentFile<T: XmlContentFile + Sync + Send>(T);
+pub struct ContentFile<T: XmlContentFile + Sync + Send> {
+    value: T,
+    pub file_path: String,
+}
 
 impl<T: XmlContentFile + Sync + Send> ContentFile<T> {
-    pub fn load(s: &str) -> Result<Self, roxmltree::Error> {
+    pub fn load_from_path(file_path: String) -> Result<Self, roxmltree::Error> {
+        let s = std::fs::read_to_string(&file_path).unwrap();
+        Self::load(&s, file_path)
+    }
+
+    pub fn load(s: &str, file_path: String) -> Result<Self, roxmltree::Error> {
         let document = Document::parse(&s).unwrap();
         let root = document.root_element();
-        Ok(ContentFile(T::from_xml(root)))
+        Ok(ContentFile {
+            value: T::from_xml(root),
+            file_path,
+        })
     }
 }
 
@@ -21,7 +32,7 @@ impl<T: XmlContentFile + Sync + Send> Deref for ContentFile<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.value
     }
 }
 
@@ -29,10 +40,16 @@ impl<T: XmlContentFile + Sync + Send> Deref for ContentFile<T> {
 pub struct SubmarineAsset {
     pub sub: SubmarineFile,
     pub hash: [u8; 16],
+    pub file_path: String,
 }
 
 impl SubmarineAsset {
-    pub fn load(bytes: &[u8]) -> Result<Self, SubAssetLoaderError> {
+    pub fn load_from_path(file_path: String) -> Result<Self, SubAssetLoaderError> {
+        let s = std::fs::read(&file_path).unwrap();
+        Self::load(&s, file_path)
+    }
+
+    pub fn load(bytes: &[u8], file_path: String) -> Result<Self, SubAssetLoaderError> {
         let mut decoder = GzDecoder::new(bytes);
         let mut buf = Vec::new();
         decoder.read_to_end(&mut buf)?;
@@ -50,6 +67,7 @@ impl SubmarineAsset {
         Ok(SubmarineAsset {
             sub: SubmarineFile::from_xml(document.root_element()),
             hash,
+            file_path
         })
     }
 }

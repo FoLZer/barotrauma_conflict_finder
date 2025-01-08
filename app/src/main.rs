@@ -24,12 +24,12 @@ use std::{path::PathBuf, sync::Arc};
 use asset_parser::loading::{ConflictType, LoadingState};
 use clap::Parser;
 use iced::{
-    Element, Subscription, Task,
+    Element, Length, Subscription, Task,
     futures::{SinkExt, Stream, StreamExt, channel::mpsc::UnboundedReceiver, lock::Mutex},
     stream,
     widget::{
-        Column, button, column, container, pick_list, radio, row, scrollable, text, text_editor,
-        text_input,
+        Column, Row, button, column, container, pick_list, radio, row, scrollable, text,
+        text_editor, text_input,
     },
 };
 use log::LevelFilter;
@@ -65,9 +65,13 @@ pub enum Message {
     ConfigPathChanged(String),
     LogMessage(String),
     LogScreenAction(text_editor::Action),
+    Conflict1EditorAction(text_editor::Action),
+    Conflict2EditorAction(text_editor::Action),
     StartParsing,
     LoadProgress(Result<asset_parser::loading::Progress, ()>),
     ConflictTypeSelected(ConflictType),
+    ConflictButtonPressed(usize),
+    ConflictFileButtonPressed(usize),
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
@@ -91,6 +95,11 @@ struct App {
 
     pub loading_state: Option<LoadingState>,
     pub selected_conflict_type: ConflictType,
+    pub selected_conflict_index: Option<usize>,
+    pub selected_conflict_file_index: Option<usize>,
+
+    pub conflict1_text: text_editor::Content,
+    pub conflict2_text: text_editor::Content,
 }
 
 impl App {
@@ -120,7 +129,7 @@ impl App {
             .push_maybe(
                 self.loading_state
                     .as_ref()
-                    .filter(|v| !matches!(v, LoadingState::Finished(_)))
+                    .filter(|v| !matches!(v, LoadingState::Finished(..)))
                     .map(|_| radio(
                         "Loading",
                         Screen::LoadingMods,
@@ -131,7 +140,7 @@ impl App {
             .push_maybe(
                 self.loading_state
                     .as_ref()
-                    .filter(|v| matches!(v, LoadingState::Finished(_)))
+                    .filter(|v| matches!(v, LoadingState::Finished(..)))
                     .map(|_| radio(
                         "Conflict Solver",
                         Screen::ConflictSolver,
@@ -178,7 +187,7 @@ impl App {
                                     text!("Loading: Loading Mods: {} / {}", i, max),
                                 LoadingState::LoadingConflicts =>
                                     text!("Loading: Loading Conflicts"),
-                                LoadingState::Finished(_) => text!("Loading: Finished!"),
+                                LoadingState::Finished(..) => text!("Loading: Finished!"),
                             },
                             None => text!("Loading: Error: Not currently loading anything"),
                         },
@@ -187,11 +196,14 @@ impl App {
                     .into()
                 }
                 Screen::ConflictSolver => {
-                    let Some(LoadingState::Finished(conflicts)) = &self.loading_state else {
+                    let Some(LoadingState::Finished(_, conflicts)) = &self.loading_state else {
                         return text!("Error! No loaded mods!").into();
                     };
                     let selected_conflicts =
                         self.selected_conflict_type.get_conflict_by_type(conflicts);
+                    let mut sorted_conflicts = selected_conflicts.iter().collect::<Vec<_>>();
+                    sorted_conflicts.sort_by(|a, b| a.0.cmp(b.0));
+
                     row![container(column![
                         pick_list(
                             ConflictType::iter()
@@ -200,12 +212,58 @@ impl App {
                             Some(self.selected_conflict_type),
                             Message::ConflictTypeSelected
                         ),
-                        scrollable(Column::with_children(selected_conflicts.iter().map(
-                            |(identifier, _)| {
-                                Into::<Element<'_, Message>>::into(text!("{}", identifier))
-                            }
-                        )))
+                        scrollable(Column::with_children(
+                            sorted_conflicts
+                                .iter()
+                                .enumerate()
+                                .map(|(i, (identifier, _))| {
+                                    Into::<Element<'_, Message>>::into(
+                                        button(text!("{}", identifier)).on_press_maybe(
+                                            if self.selected_conflict_index.is_none_or(|v| v != i) {
+                                                Some(Message::ConflictButtonPressed(i))
+                                            } else {
+                                                None
+                                            },
+                                        ),
+                                    )
+                                })
+                        ))
                     ])]
+                    .push_maybe(
+                        if let Some(selected_conflict_index) = self.selected_conflict_index {
+                            let (will_be_loaded_from, conflict_data) =
+                                &sorted_conflicts[selected_conflict_index];
+                            Some(column![
+                                Row::with_children(conflict_data.added_by.iter().enumerate().map(
+                                    |(i, package)| {
+                                        Into::<Element<'_, Message>>::into(
+                                            button(text!("{}", package.package_id()))
+                                                .on_press_maybe(
+                                                    if self
+                                                        .selected_conflict_file_index
+                                                        .is_none_or(|v| v != i)
+                                                    {
+                                                        Some(Message::ConflictFileButtonPressed(i))
+                                                    } else {
+                                                        None
+                                                    },
+                                                ),
+                                        )
+                                    },
+                                )),
+                                row![
+                                    text_editor(&self.conflict1_text)
+                                        .height(Length::Fill)
+                                        .on_action(Message::Conflict1EditorAction),
+                                    text_editor(&self.conflict2_text)
+                                        .height(Length::Fill)
+                                        .on_action(Message::Conflict2EditorAction)
+                                ]
+                            ])
+                        } else {
+                            None
+                        },
+                    )
                     .into()
                 }
             })
@@ -238,9 +296,21 @@ impl App {
                     self.logs.perform(action);
                 }
             }
+            Message::Conflict1EditorAction(action) => {
+                if !action.is_edit() {
+                    self.conflict1_text.perform(action);
+                }
+            }
+            Message::Conflict2EditorAction(action) => {
+                self.conflict2_text.perform(action);
+            }
             Message::StartParsing => {
                 let game_path = PathBuf::from(&self.args.game_path);
                 let config_player_path = self.args.config_player_path();
+
+                self.selected_conflict_file_index = None;
+                self.selected_conflict_index = None;
+                self.selected_conflict_type = ConflictType::Item;
 
                 self.loading_state = Some(LoadingState::Started);
 
@@ -260,7 +330,58 @@ impl App {
                     return Task::done(Message::ScreenChanged(Screen::Logs));
                 }
             },
-            Message::ConflictTypeSelected(t) => self.selected_conflict_type = t,
+            Message::ConflictTypeSelected(t) => {
+                self.selected_conflict_file_index = None;
+                self.selected_conflict_index = None;
+                self.selected_conflict_type = t
+            }
+            Message::ConflictButtonPressed(i) => {
+                self.selected_conflict_file_index = None;
+                self.selected_conflict_index = Some(i);
+            }
+            Message::ConflictFileButtonPressed(i) => {
+                let Some(LoadingState::Finished(loaded_content_files, conflicts)) =
+                    &self.loading_state
+                else {
+                    return Task::none();
+                };
+                let Some(selected_conflict_index) = &self.selected_conflict_index else {
+                    return Task::none();
+                };
+                let selected_conflicts =
+                    self.selected_conflict_type.get_conflict_by_type(conflicts);
+                let mut sorted_conflicts = selected_conflicts.iter().collect::<Vec<_>>();
+                sorted_conflicts.sort_by(|a, b| a.0.cmp(b.0));
+
+                let conflict = &sorted_conflicts[*selected_conflict_index];
+                let package = &conflict.1.added_by[i];
+                let files = loaded_content_files
+                    .iter()
+                    .find(|(v, _)| Arc::ptr_eq(v, package))
+                    .expect("Content package added by selected conflict wasn't found in loaded content packages! This is a developer error! If you know what causes this, please open an issue on https://github.com/FoLZer/barotrauma_conflict_finder/issues",);
+                let file_path = self
+                    .selected_conflict_type
+                    .get_conflict_file_by_type(&files.1, conflict.0)
+                    .expect(
+                        "Selected conflict was not found in the files! This is a developer error! If you know what causes this, please open an issue on https://github.com/FoLZer/barotrauma_conflict_finder/issues",
+                    );
+
+                let text = std::fs::read_to_string(file_path).unwrap();
+
+                self.conflict1_text.perform(text_editor::Action::SelectAll);
+                //self.conflict1_text
+                //    .perform(text_editor::Action::Edit(text_editor::Edit::Backspace));
+                self.conflict1_text
+                    .perform(text_editor::Action::Edit(text_editor::Edit::Paste(
+                        Arc::new(text),
+                    )));
+                //TODO: put cursor at the start of the prefab OR only paste the part with the prefab
+                self.conflict1_text.perform(text_editor::Action::Move(
+                    text_editor::Motion::DocumentStart,
+                ));
+
+                self.selected_conflict_file_index = Some(i)
+            }
         }
         Task::none()
     }
@@ -304,6 +425,10 @@ fn main() -> iced::Result {
                 logger_rx,
                 loading_state: Default::default(),
                 selected_conflict_type: ConflictType::Item,
+                selected_conflict_index: None,
+                selected_conflict_file_index: None,
+                conflict1_text: Default::default(),
+                conflict2_text: Default::default(),
             };
             (state, Task::none())
         })

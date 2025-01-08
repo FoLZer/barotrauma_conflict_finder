@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, path::PathBuf, sync::Arc};
+use std::{marker::PhantomData, path::PathBuf};
 
 use regex::RegexBuilder;
 use roxmltree::{Document, Node};
@@ -10,8 +10,10 @@ use crate::{
     },
 };
 
+#[derive(Debug)]
 pub struct Core;
 
+#[derive(Debug)]
 pub struct Regular;
 
 pub trait ContentPackageType: Sync + Send {
@@ -76,12 +78,12 @@ pub struct ContentFilePaths {
 pub struct ContentFiles {
     pub items: Vec<ContentFile<ItemFile>>,
     pub texts: Vec<ContentFile<TextFile>>,
-    pub submarines: Vec<Arc<SubmarineAsset>>,
-    pub outposts: Vec<Arc<SubmarineAsset>>,
-    pub outpost_modules: Vec<Arc<SubmarineAsset>>,
-    pub wrecks: Vec<Arc<SubmarineAsset>>,
-    pub beacon_stations: Vec<Arc<SubmarineAsset>>,
-    pub enemy_submarines: Vec<Arc<SubmarineAsset>>,
+    pub submarines: Vec<SubmarineAsset>,
+    pub outposts: Vec<SubmarineAsset>,
+    pub outpost_modules: Vec<SubmarineAsset>,
+    pub wrecks: Vec<SubmarineAsset>,
+    pub beacon_stations: Vec<SubmarineAsset>,
+    pub enemy_submarines: Vec<SubmarineAsset>,
     pub npc_conversations: Vec<ContentFile<NPCConversationFile>>,
     pub item_assemblies: Vec<ContentFile<ItemAssemblyFile>>,
     pub talents: Vec<ContentFile<TalentsFile>>,
@@ -119,6 +121,7 @@ pub struct ContentFiles {
     pub tutorial_prefabs: Vec<ContentFile<TutorialsFile>>,
 }
 
+#[derive(Debug)]
 pub enum AnyContentPackage {
     Core(ContentPackage<Core>),
     Regular(ContentPackage<Regular>),
@@ -138,8 +141,15 @@ impl AnyContentPackage {
             AnyContentPackage::Regular(content_package) => &content_package.steam_workshop_id,
         }
     }
+
+    pub fn package_id(&self) -> String {
+        self.name()
+            .clone()
+            .unwrap_or_else(|| self.steam_workshop_id().unwrap().to_string())
+    }
 }
 
+#[derive(Debug)]
 pub struct ContentPackage<T: ContentPackageType> {
     //attributes
     pub name: Option<String>,
@@ -364,52 +374,71 @@ impl<T: ContentPackageType> ContentPackage<T> {
         mod_path: &str,
         installed_packages: &[(ContentPackage<Regular>, PathBuf)],
     ) -> ContentFiles {
-        #[rustfmt::skip]
-        let files = ContentFiles {
-            items: self.file_paths.items.iter().map(|file_path| ContentFile::<ItemFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            texts: self.file_paths.texts.iter().map(|file_path| ContentFile::<TextFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            submarines: self.file_paths.submarines.iter().map(|file_path| Arc::new(SubmarineAsset::load(&std::fs::read(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap())).collect(),
-            outposts: self.file_paths.outposts.iter().map(|file_path| Arc::new(SubmarineAsset::load(&std::fs::read(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap())).collect(),
-            outpost_modules: self.file_paths.outpost_modules.iter().map(|file_path| Arc::new(SubmarineAsset::load(&std::fs::read(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap())).collect(),
-            wrecks: self.file_paths.wrecks.iter().map(|file_path| Arc::new(SubmarineAsset::load(&std::fs::read(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap())).collect(),
-            beacon_stations: self.file_paths.beacon_stations.iter().map(|file_path| Arc::new(SubmarineAsset::load(&std::fs::read(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap())).collect(),
-            enemy_submarines: self.file_paths.enemy_submarines.iter().map(|file_path| Arc::new(SubmarineAsset::load(&std::fs::read(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap())).collect(),
-            npc_conversations: self.file_paths.npc_conversations.iter().map(|file_path| ContentFile::<NPCConversationFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            item_assemblies: self.file_paths.item_assemblies.iter().map(|file_path| ContentFile::<ItemAssemblyFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            talents: self.file_paths.talents.iter().map(|file_path| ContentFile::<TalentsFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            npc_sets: self.file_paths.npc_sets.iter().map(|file_path| ContentFile::<NPCSetsFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            characters: self.file_paths.characters.iter().map(|file_path| ContentFile::<CharacterFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            slideshows: self.file_paths.slideshows.iter().map(|file_path| ContentFile::<SlideshowsFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            talent_trees: self.file_paths.talent_trees.iter().map(|file_path| ContentFile::<TalentTreesFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            level_generation_parameters: self.file_paths.level_generation_parameters.iter().map(|file_path| ContentFile::<LevelGenerationParametersFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            ballast_flora: self.file_paths.ballast_flora.iter().map(|file_path| ContentFile::<BallastFloraFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            start_items: self.file_paths.start_items.iter().map(|file_path| ContentFile::<StartItemsFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            level_object_prefabs: self.file_paths.level_object_prefabs.iter().map(|file_path| ContentFile::<LevelObjectPrefabsFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            afflictions: self.file_paths.afflictions.iter().map(|file_path| ContentFile::<AfflictionsFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            random_events: self.file_paths.random_events.iter().map(|file_path| ContentFile::<RandomEventsFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            structures: self.file_paths.structures.iter().map(|file_path| ContentFile::<StructureFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            ui_styles: self.file_paths.ui_styles.iter().map(|file_path| ContentFile::<UIStyleFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            upgrade_modules: self.file_paths.upgrade_modules.iter().map(|file_path| ContentFile::<UpgradeModulesFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            ruin_configs: self.file_paths.ruin_configs.iter().map(|file_path| ContentFile::<RuinConfigFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            outpost_configs: self.file_paths.outpost_configs.iter().map(|file_path| ContentFile::<OutpostConfigFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            wreck_ai_configs: self.file_paths.wreck_ai_configs.iter().map(|file_path| ContentFile::<WreckAIConfigFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            map_generation_params: self.file_paths.map_generation_params.iter().map(|file_path| ContentFile::<MapGenerationParametersFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            cave_generation_params: self.file_paths.cave_generation_params.iter().map(|file_path| ContentFile::<CaveGenerationParamsFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            background_creature_prefabs: self.file_paths.background_creature_prefabs.iter().map(|file_path| ContentFile::<BackgroundCreaturePrefabsFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            particle_prefabs: self.file_paths.particle_prefabs.iter().map(|file_path| ContentFile::<ParticlesFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            event_manager_settings: self.file_paths.event_manager_settings.iter().map(|file_path| ContentFile::<EventManagerSettingsFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            npc_personality_traits: self.file_paths.npc_personality_traits.iter().map(|file_path| ContentFile::<NPCPersonalityTraitsFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            jobs: self.file_paths.jobs.iter().map(|file_path| ContentFile::<JobsFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            corpse_prefabs: self.file_paths.corpse_prefabs.iter().map(|file_path| ContentFile::<CorpsesFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            sound_prefabs: self.file_paths.sound_prefabs.iter().map(|file_path| ContentFile::<SoundsFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            decal_prefabs: self.file_paths.decal_prefabs.iter().map(|file_path| ContentFile::<DecalsFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            location_types: self.file_paths.location_types.iter().map(|file_path| ContentFile::<LocationTypesFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            mission_prefabs: self.file_paths.mission_prefabs.iter().map(|file_path| ContentFile::<MissionsFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            order_prefabs: self.file_paths.order_prefabs.iter().map(|file_path| ContentFile::<OrdersFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            skill_settings: self.file_paths.skill_settings.iter().map(|file_path| ContentFile::<SkillSettingsFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            faction_prefabs: self.file_paths.faction_prefabs.iter().map(|file_path| ContentFile::<FactionsFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-            tutorial_prefabs: self.file_paths.tutorial_prefabs.iter().map(|file_path| ContentFile::<TutorialsFile>::load(&std::fs::read_to_string(replace_file_path(file_path, mod_path, installed_packages)).unwrap()).unwrap()).collect(),
-        };
+        macro_rules! paths_to_files {
+            (
+                $files: ident,
+                $($field: ident, $load_type: ty);*
+            ) => {
+                let $files = ContentFiles {
+                    $(
+                        $field: {
+                            self.file_paths.$field.iter().map(|file_path| {
+                                let file_path = replace_file_path(file_path, mod_path, installed_packages);
+                                <$load_type>::load_from_path(file_path).unwrap()
+                            }).collect()
+                        },
+                    )*
+                };
+            };
+        }
+
+        paths_to_files!(
+            files,
+
+            items, ContentFile::<ItemFile>;
+            texts, ContentFile::<TextFile>;
+            submarines, SubmarineAsset;
+            outposts, SubmarineAsset;
+            outpost_modules, SubmarineAsset;
+            wrecks, SubmarineAsset;
+            beacon_stations, SubmarineAsset;
+            enemy_submarines, SubmarineAsset;
+            npc_conversations, ContentFile::<NPCConversationFile>;
+            item_assemblies, ContentFile::<ItemAssemblyFile>;
+            talents, ContentFile::<TalentsFile>;
+            npc_sets, ContentFile::<NPCSetsFile>;
+            characters, ContentFile::<CharacterFile>;
+            slideshows, ContentFile::<SlideshowsFile>;
+            talent_trees, ContentFile::<TalentTreesFile>;
+            level_generation_parameters, ContentFile::<LevelGenerationParametersFile>;
+            ballast_flora, ContentFile::<BallastFloraFile>;
+            start_items, ContentFile::<StartItemsFile>;
+            level_object_prefabs, ContentFile::<LevelObjectPrefabsFile>;
+            afflictions, ContentFile::<AfflictionsFile>;
+            random_events, ContentFile::<RandomEventsFile>;
+            structures, ContentFile::<StructureFile>;
+            ui_styles, ContentFile::<UIStyleFile>;
+            upgrade_modules, ContentFile::<UpgradeModulesFile>;
+            ruin_configs, ContentFile::<RuinConfigFile>;
+            outpost_configs, ContentFile::<OutpostConfigFile>;
+            wreck_ai_configs, ContentFile::<WreckAIConfigFile>;
+            map_generation_params, ContentFile::<MapGenerationParametersFile>;
+            cave_generation_params, ContentFile::<CaveGenerationParamsFile>;
+            background_creature_prefabs, ContentFile::<BackgroundCreaturePrefabsFile>;
+            particle_prefabs, ContentFile::<ParticlesFile>;
+            event_manager_settings, ContentFile::<EventManagerSettingsFile>;
+            npc_personality_traits, ContentFile::<NPCPersonalityTraitsFile>;
+            jobs, ContentFile::<JobsFile>;
+            corpse_prefabs, ContentFile::<CorpsesFile>;
+            sound_prefabs, ContentFile::<SoundsFile>;
+            decal_prefabs, ContentFile::<DecalsFile>;
+            location_types, ContentFile::<LocationTypesFile>;
+            mission_prefabs, ContentFile::<MissionsFile>;
+            order_prefabs, ContentFile::<OrdersFile>;
+            skill_settings, ContentFile::<SkillSettingsFile>;
+            faction_prefabs, ContentFile::<FactionsFile>;
+            tutorial_prefabs, ContentFile::<TutorialsFile>
+        );
 
         files
     }

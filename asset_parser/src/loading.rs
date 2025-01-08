@@ -13,10 +13,13 @@ use std::{
     sync::Arc,
 };
 
-use crate::{content_package::{AnyContentPackage, ContentPackage, Core, Regular}, player_config::PlayerConfigFile};
+use crate::{
+    content_package::{AnyContentPackage, ContentFiles, ContentPackage, Core, Regular},
+    player_config::PlayerConfigFile,
+};
 
 macro_rules! detect_conflict {
-    ($item_name: literal, $id_map: expr, $content_file: expr, $overridable_field: ident, $package_id: ident) => {
+    ($item_name: literal, $id_map: expr, $content_file: expr, $overridable_field: ident, $package_id: ident, $package: ident) => {
         for item_file in &$content_file {
             for item in &item_file.$overridable_field {
                 let identifier = &item.value.get_identifier();
@@ -24,7 +27,7 @@ macro_rules! detect_conflict {
                     std::collections::hash_map::Entry::Occupied(mut occupied_entry) => {
                         if occupied_entry.get().was_overriden {
                             log::error!("[{}] id {} is already loaded!", $item_name, identifier);
-                            occupied_entry.get_mut().added_by.push($package_id.clone());
+                            occupied_entry.get_mut().added_by.push($package.clone());
                             continue;
                         } else {
                             if !item.is_override {
@@ -32,13 +35,13 @@ macro_rules! detect_conflict {
                                     "[{}] id {} was already defined and this mod declares it but doesn't override!",
                                     $item_name, identifier
                                 );
-                                occupied_entry.get_mut().added_by.push($package_id.clone());
+                                occupied_entry.get_mut().added_by.push($package.clone());
 
                                 continue;
                             } else {
                                 let e = occupied_entry.get_mut();
                                 e.was_overriden = true;
-                                e.added_by.push($package_id.clone());
+                                e.added_by.push($package.clone());
 
                                 trace!(
                                     "[{}] id {} is overriden by this mod",
@@ -50,7 +53,7 @@ macro_rules! detect_conflict {
                     std::collections::hash_map::Entry::Vacant(vacant_entry) => {
                         vacant_entry.insert(IdCheck {
                             was_overriden: false,
-                            added_by: vec![$package_id.clone()]
+                            added_by: vec![$package.clone()]
                         });
                     }
                 }
@@ -71,17 +74,14 @@ macro_rules! detect_conflict_loop {
             }
         )*
         for (package, content_files) in &$loaded_content_files {
-            let package_id = package
-                .name()
-                .clone()
-                .unwrap_or_else(|| package.steam_workshop_id().unwrap().to_string());
+            let package_id = package.package_id();
             info!(
                 "Loading package {}",
                 package_id
             );
             $(
                 paste! {
-                    detect_conflict!($item_name, [<loaded_ $content_file $overridable_field _id>], content_files.$content_file, $overridable_field, package_id);
+                    detect_conflict!($item_name, [<loaded_ $content_file $overridable_field _id>], content_files.$content_file, $overridable_field, package_id, package);
                 }
             )*
         }
@@ -90,7 +90,7 @@ macro_rules! detect_conflict_loop {
             paste! {
                 for (id, entry) in [<loaded_ $content_file $overridable_field _id>] {
                     if entry.added_by.len() > 2 {
-                        log::error!("{}: {} is defined by: {:?}", $item_name, id, entry.added_by);
+                        log::error!("{}: {} is defined by: {:?}", $item_name, id, entry.added_by.iter().map(|v| v.package_id()).collect::<Vec<_>>());
                         $conflicts_struct_name.$field_name.insert(id, entry);
                     }
                 }
@@ -199,7 +199,10 @@ pub fn load(
             &installed_packages,
         );
 
-        loaded_content_files.push((AnyContentPackage::Core(core_package), core_package_files));
+        loaded_content_files.push((
+            Arc::new(AnyContentPackage::Core(core_package)),
+            core_package_files,
+        ));
 
         let num_mods = player_config.content_packages.regular_packages.len();
 
@@ -241,7 +244,7 @@ pub fn load(
                     .unwrap(),
                 &installed_packages,
             );
-            loaded_content_files.push((AnyContentPackage::Regular(package), files));
+            loaded_content_files.push((Arc::new(AnyContentPackage::Regular(package)), files));
         }
 
         let _ = output.send(Progress::LoadingConflicts).await;
@@ -301,7 +304,7 @@ pub fn load(
             "Faction Prefabs",faction_prefabs,faction_prefabs,faction_prefabs_faction_prefabs;
             "Tutorial Prefabs",tutorial_prefabs,tutorial_prefabs,tutorial_prefabs_tutorial_prefabs
         );
-        let _ = output.send(Progress::Finished(Arc::new(conflicts))).await;
+        let _ = output.send(Progress::Finished(Arc::new(loaded_content_files), Arc::new(conflicts))).await;
         Ok(())
     })
 }
@@ -349,7 +352,7 @@ pub struct Conflicts {
     tutorial_prefabs_tutorial_prefabs: HashMap<String, IdCheck>,
 }
 
-macro_rules! t {
+macro_rules! build_conflict_type_enum {
     (
         $( $item_name: ident, $display_name: literal, $content_file: ident, $overridable_field: ident, $field_name: ident );*
     ) => {
@@ -368,6 +371,15 @@ macro_rules! t {
                     )*
                 }
             }
+
+            /// Currently implemented as a slow lookup
+            pub fn get_conflict_file_by_type<'a>(&self, files: &'a ContentFiles, item_identifier: &str) -> Option<&'a String> {
+                match self {
+                    $(
+                        Self::$item_name => files.$content_file.iter().find(|v| v.$overridable_field.iter().any(|v| v.value.get_identifier().to_string() == item_identifier)).map(|v| &v.file_path),
+                    )*
+                }
+            }
         }
 
         impl Display for ConflictType {
@@ -382,7 +394,7 @@ macro_rules! t {
     };
 }
 
-t!(
+build_conflict_type_enum!(
     Item,"Item",items,items,items_items;
     ItemAssembly,"Item assembly",item_assemblies,item_assemblies,item_assemblies_item_assemblies;
     Talents,"Talents",talents,items,talents_items;
@@ -430,13 +442,13 @@ pub enum Progress {
     LoadingCoreContent,
     LoadingMods { i: usize, max: usize },
     LoadingConflicts,
-    Finished(Arc<Conflicts>),
+    Finished(Arc<Vec<(Arc<AnyContentPackage>, ContentFiles)>>, Arc<Conflicts>),
 }
 
 #[derive(Debug)]
 pub struct IdCheck {
     pub was_overriden: bool,
-    pub added_by: Vec<String>,
+    pub added_by: Vec<Arc<AnyContentPackage>>,
 }
 
 pub enum LoadingState {
@@ -445,7 +457,7 @@ pub enum LoadingState {
     LoadingCoreContent,
     LoadingMods { i: usize, max: usize },
     LoadingConflicts,
-    Finished(Arc<Conflicts>),
+    Finished(Arc<Vec<(Arc<AnyContentPackage>, ContentFiles)>>, Arc<Conflicts>),
 }
 
 impl From<Progress> for LoadingState {
@@ -455,7 +467,7 @@ impl From<Progress> for LoadingState {
             Progress::LoadingCoreContent => Self::LoadingCoreContent,
             Progress::LoadingMods { i, max } => Self::LoadingMods { i, max },
             Progress::LoadingConflicts => Self::LoadingConflicts,
-            Progress::Finished(conflicts) => Self::Finished(conflicts),
+            Progress::Finished(content_files, conflicts) => Self::Finished(content_files, conflicts),
         }
     }
 }
