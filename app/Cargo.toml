@@ -9,6 +9,7 @@ license = "GPL-2.0-only"
 clap = { version = "*", features = ["derive"] }
 log = { version = "*", features = ["std"] }
 iced = { version = "0.13.1", features = ["highlighter"] }
+iced_core = "*"
 strum = { version = "*", features = ["derive"] }
 asset_parser = { path = "../asset_parser" }
 serde = { version = "*", features = ["derive"] }

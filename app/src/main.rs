@@ -16,6 +16,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+pub mod log_highlighter;
 pub mod logger;
 pub mod manifest;
 
@@ -36,6 +37,7 @@ use iced::{
         text_editor, text_input,
     },
 };
+use iced_core::text::highlighter::Format;
 use log::LevelFilter;
 use logger::SimpleLogger;
 use manifest::{ModIdentifier, ModManifest};
@@ -217,6 +219,7 @@ impl App {
                 Screen::Logs => {
                     text_editor(&self.logs)
                         .on_action(Message::LogScreenAction)
+                        .highlight_with::<log_highlighter::Highlighter>((), |color, _| Format { color: *color, font: Default::default() })
                         .into()
                 }
                 Screen::LoadingMods => {
@@ -235,7 +238,7 @@ impl App {
                             },
                             None => text!("Loading: Error: Not currently loading anything"),
                         },
-                        text_editor(&self.logs).on_action(Message::LogScreenAction)
+                        text_editor(&self.logs).highlight_with::<log_highlighter::Highlighter>((), |color, _| Format { color: *color, font: Default::default() }).on_action(Message::LogScreenAction)
                     ]
                     .into()
                 }
@@ -391,6 +394,7 @@ impl App {
                     }
                 }
                 Err(_) => {
+                    self.loading_state = None;
                     return Task::done(Message::ScreenChanged(Screen::Logs));
                 }
             },

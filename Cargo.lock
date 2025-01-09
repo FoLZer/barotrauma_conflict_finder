@@ -376,6 +376,7 @@ dependencies = [
  "asset_parser",
  "clap",
  "iced",
+ "iced_core",
  "log",
  "serde",
  "serde_json",
