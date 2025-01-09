@@ -65,7 +65,7 @@ impl ModManifest {
                 })
                 .collect(),
             in_progress_conflicts: self
-                .resolved_conflicts
+                .in_progress_conflicts
                 .iter()
                 .map(|(k, v)| {
                     (

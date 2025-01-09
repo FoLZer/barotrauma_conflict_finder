@@ -15,7 +15,9 @@ use std::{
 };
 
 use crate::{
-    content_package::{AnyContentPackage, ContentFiles, ContentPackage, Core, Regular},
+    content_package::{
+        AnyContentPackage, ContentFilePaths, ContentFiles, ContentPackage, Core, Regular,
+    },
     player_config::PlayerConfigFile,
 };
 
@@ -365,7 +367,7 @@ pub struct Conflicts {
 
 macro_rules! build_conflict_type_enum {
     (
-        $( $item_name: ident, $display_name: literal, $content_file: ident, $overridable_field: ident, $field_name: ident );*
+        $( $item_name: ident, $display_name: literal, $content_file: ident, $overridable_field: ident, $field_name: ident, $prefab_name: literal );*
     ) => {
         #[derive(EnumIter, Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize, Hash)]
         pub enum ConflictType {
@@ -391,6 +393,23 @@ macro_rules! build_conflict_type_enum {
                     )*
                 }
             }
+
+            pub fn get_mut_conflict_file_paths_by_type<'a>(&self, file_paths: &'a mut ContentFilePaths,) -> &'a mut Vec<String> {
+                match self {
+                    $(
+                        Self::$item_name => &mut file_paths.$content_file,
+                    )*
+                }
+            }
+
+            //probably shouldn't be here but it's convenient
+            pub fn get_prefab_name(&self) -> &'static str {
+                match self {
+                    $(
+                        Self::$item_name => $prefab_name,
+                    )*
+                }
+            }
         }
 
         impl Display for ConflictType {
@@ -406,45 +425,45 @@ macro_rules! build_conflict_type_enum {
 }
 
 build_conflict_type_enum!(
-    Item,"Item",items,items,items_items;
-    ItemAssembly,"Item assembly",item_assemblies,item_assemblies,item_assemblies_item_assemblies;
-    Talents,"Talents",talents,items,talents_items;
-    NPCSets,"NPC Sets",npc_sets,sets,npc_sets_sets;
-    Slideshows,"Slideshows",slideshows,slideshows,slideshows_slideshows;
-    TalentTrees,"Talent Trees",talent_trees,trees,talent_trees_trees;
-    Biomes,"Biomes",level_generation_parameters,biomes,level_generation_parameters_biomes;
-    LevelGenerationParameters,"Level Generation Parameters",level_generation_parameters,level_generation_params,level_generation_parameters_level_generation_params;
-    BallastFlora,"Ballast Flora",ballast_flora,prefabs,ballast_flora_prefabs;
-    StartItems,"Start Items",start_items,sets,start_items_sets;
-    LevelObjectPrefabs,"Level Object Prefabs",level_object_prefabs,prefabs,level_object_prefabs_prefabs;
-    AfflictionPrefabs,"Affliction Prefabs",afflictions,affliction_prefabs,afflictions_affliction_prefabs;
-    RandomTraitorEventPrefabs,"Random Traitor Event Prefabs",random_events,traitor_event_prefabs,random_events_traitor_event_prefabs;
-    RandomEventPrefabs,"Random Event Prefabs",random_events,event_prefabs,random_events_event_prefabs;
-    RandomEventSprites,"Random Event Sprites",random_events,event_sprites,random_events_event_sprites;
-    RandomEventSets,"Random Event Sets",random_events,event_sets,random_events_event_sets;
-    StructurePrefabs,"Structure Prefabs",structures,prefabs,structures_prefabs;
-    UpgradeModulesCategories,"Upgrade Modules Categories",upgrade_modules,categories,upgrade_modules_categories;
-    UpgradeModulesPrefabs,"Upgrade Modules Prefabs",upgrade_modules,prefabs,upgrade_modules_prefabs;
-    RuinGenerationParameters,"Ruin Generation Parameters",ruin_configs,ruin_generation_params,ruin_configs_ruin_generation_params;
-    OutpostGenerationParameters,"Outpost Generation Parameters",outpost_configs,outpost_generation_params,outpost_configs_outpost_generation_params;
-    WreckAIConfigs,"Wreck AI Configs",wreck_ai_configs,wreck_ai_configs,wreck_ai_configs_wreck_ai_configs;
-    CaveGenerationParameters,"Cave Generation Parameters",cave_generation_params,cave_generation_params,cave_generation_params_cave_generation_params;
-    ParticlePrefabs,"Particle Prefabs",particle_prefabs,particle_prefabs,particle_prefabs_particle_prefabs;
-    EventManagerSettings,"Event Manager Settings",event_manager_settings,event_manager_settings,event_manager_settings_event_manager_settings;
-    NPCPersonalityTraits,"NPC Personality Traits",npc_personality_traits,npc_personality_traits,npc_personality_traits_npc_personality_traits;
-    ItemRepairPriorities,"Item Repair Priorities",jobs,item_repair_priorities,jobs_item_repair_priorities;
-    Jobs,"Jobs",jobs,jobs,jobs_jobs;
-    CorpsePrefabs,"Corpse Prefabs",corpse_prefabs,corpse_prefabs,corpse_prefabs_corpse_prefabs;
-    DamageSoundPrefabs,"Damage Sound Prefabs",sound_prefabs,damage_sound_prefabs,sound_prefabs_damage_sound_prefabs;
-    BackgroundMusicPrefabs,"Background Music Prefabs",sound_prefabs,background_music_prefabs,sound_prefabs_background_music_prefabs;
-    GUISoundPrefabs,"GUI Sound Prefabs",sound_prefabs,gui_sound_prefabs,sound_prefabs_gui_sound_prefabs;
-    DecalPrefabs,"Decal Prefabs",decal_prefabs,decal_prefabs,decal_prefabs_decal_prefabs;
-    LocationTypes,"Location Types",location_types,location_types,location_types_location_types;
-    MissionPrefabs,"Mission Prefabs",mission_prefabs,mission_prefabs,mission_prefabs_mission_prefabs;
-    OrderPrefabs,"Order Prefabs",order_prefabs,order_prefabs,order_prefabs_order_prefabs;
-    OrderCategoryIcons,"Order Category Icons",order_prefabs,order_category_icons,order_prefabs_order_category_icons;
-    FactionPrefabs,"Faction Prefabs",faction_prefabs,faction_prefabs,faction_prefabs_faction_prefabs;
-    TutorialPrefabs,"Tutorial Prefabs",tutorial_prefabs,tutorial_prefabs,tutorial_prefabs_tutorial_prefabs
+    Item,"Item",items,items,items_items, "Items";
+    ItemAssembly,"Item assembly",item_assemblies,item_assemblies,item_assemblies_item_assemblies, "ItemAssemblies";
+    Talents,"Talents",talents,items,talents_items, "Talents";
+    NPCSets,"NPC Sets",npc_sets,sets,npc_sets_sets, "NpcSets";
+    Slideshows,"Slideshows",slideshows,slideshows,slideshows_slideshows, "Slideshows";
+    TalentTrees,"Talent Trees",talent_trees,trees,talent_trees_trees, "TalentTrees";
+    Biomes,"Biomes",level_generation_parameters,biomes,level_generation_parameters_biomes, "Biomes";
+    LevelGenerationParameters,"Level Generation Parameters",level_generation_parameters,level_generation_params,level_generation_parameters_level_generation_params, "LevelGenerationParameters";
+    BallastFlora,"Ballast Flora",ballast_flora,prefabs,ballast_flora_prefabs, "BallastFloraBehaviors";
+    StartItems,"Start Items",start_items,sets,start_items_sets, "StartItems";
+    LevelObjectPrefabs,"Level Object Prefabs",level_object_prefabs,prefabs,level_object_prefabs_prefabs, "LevelObjects";
+    AfflictionPrefabs,"Affliction Prefabs",afflictions,affliction_prefabs,afflictions_affliction_prefabs, "Afflictions";
+    RandomTraitorEventPrefabs,"Random Traitor Event Prefabs",random_events,traitor_event_prefabs,random_events_traitor_event_prefabs, "EventPrefabs";
+    RandomEventPrefabs,"Random Event Prefabs",random_events,event_prefabs,random_events_event_prefabs, "EventPrefabs";
+    RandomEventSprites,"Random Event Sprites",random_events,event_sprites,random_events_event_sprites, "EventSprites";
+    RandomEventSets,"Random Event Sets",random_events,event_sets,random_events_event_sets, "EventSet";
+    StructurePrefabs,"Structure Prefabs",structures,prefabs,structures_prefabs, "Structures";
+    UpgradeModulesCategories,"Upgrade Modules Categories",upgrade_modules,categories,upgrade_modules_categories, "UpgradeCategory";
+    UpgradeModulesPrefabs,"Upgrade Modules Prefabs",upgrade_modules,prefabs,upgrade_modules_prefabs, "UpgradeModules";
+    RuinGenerationParameters,"Ruin Generation Parameters",ruin_configs,ruin_generation_params,ruin_configs_ruin_generation_params, "RuinGenerationParameters";
+    OutpostGenerationParameters,"Outpost Generation Parameters",outpost_configs,outpost_generation_params,outpost_configs_outpost_generation_params, "OutpostGenerationParameters";
+    WreckAIConfigs,"Wreck AI Configs",wreck_ai_configs,wreck_ai_configs,wreck_ai_configs_wreck_ai_configs, "WreckAIConfigs";
+    CaveGenerationParameters,"Cave Generation Parameters",cave_generation_params,cave_generation_params,cave_generation_params_cave_generation_params, "CaveGenerationParameters";
+    ParticlePrefabs,"Particle Prefabs",particle_prefabs,particle_prefabs,particle_prefabs_particle_prefabs, "Particles";
+    EventManagerSettings,"Event Manager Settings",event_manager_settings,event_manager_settings,event_manager_settings_event_manager_settings, "EventManagerSettings";
+    NPCPersonalityTraits,"NPC Personality Traits",npc_personality_traits,npc_personality_traits,npc_personality_traits_npc_personality_traits, "PersonalityTraits";
+    ItemRepairPriorities,"Item Repair Priorities",jobs,item_repair_priorities,jobs_item_repair_priorities, "ItemRepairPriorities";
+    Jobs,"Jobs",jobs,jobs,jobs_jobs, "Job";
+    CorpsePrefabs,"Corpse Prefabs",corpse_prefabs,corpse_prefabs,corpse_prefabs_corpse_prefabs, "Corpses";
+    DamageSoundPrefabs,"Damage Sound Prefabs",sound_prefabs,damage_sound_prefabs,sound_prefabs_damage_sound_prefabs, "DamageSound";
+    BackgroundMusicPrefabs,"Background Music Prefabs",sound_prefabs,background_music_prefabs,sound_prefabs_background_music_prefabs, "Music";
+    GUISoundPrefabs,"GUI Sound Prefabs",sound_prefabs,gui_sound_prefabs,sound_prefabs_gui_sound_prefabs, "GUISound";
+    DecalPrefabs,"Decal Prefabs",decal_prefabs,decal_prefabs,decal_prefabs_decal_prefabs, "Decal";
+    LocationTypes,"Location Types",location_types,location_types,location_types_location_types, "LocationTypes";
+    MissionPrefabs,"Mission Prefabs",mission_prefabs,mission_prefabs,mission_prefabs_mission_prefabs, "Missions";
+    OrderPrefabs,"Order Prefabs",order_prefabs,order_prefabs,order_prefabs_order_prefabs, "Orders";
+    OrderCategoryIcons,"Order Category Icons",order_prefabs,order_category_icons,order_prefabs_order_category_icons, "OrderCategoryIcon";
+    FactionPrefabs,"Faction Prefabs",faction_prefabs,faction_prefabs,faction_prefabs_faction_prefabs, "Factions";
+    TutorialPrefabs,"Tutorial Prefabs",tutorial_prefabs,tutorial_prefabs,tutorial_prefabs_tutorial_prefabs, "Tutorials"
 );
 
 #[derive(Debug, Clone)]

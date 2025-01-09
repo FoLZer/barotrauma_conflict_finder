@@ -41,6 +41,6 @@ impl iced::widget::text::Highlighter for Highlighter {
     }
 
     fn current_line(&self) -> usize {
-        self.current_line
+        0
     }
 }

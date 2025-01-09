@@ -40,7 +40,7 @@ use iced::{
 use iced_core::text::highlighter::Format;
 use log::LevelFilter;
 use logger::SimpleLogger;
-use manifest::{ModIdentifier, ModManifest};
+use manifest::{ConflictStoreData, ModIdentifier, ModManifest};
 use strum::IntoEnumIterator;
 
 const CURRENT_GAME_VERSION: Version = Version {
@@ -100,6 +100,8 @@ pub enum Message {
     PatchModLoaded(Arc<(ContentPackage<Regular>, ModManifest)>),
     LoadPatchMod,
     PatchModPathChanged(String),
+    ConflictSavePressed,
+    ConflictResolvePressed,
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
@@ -131,7 +133,8 @@ struct App {
 
     pub xml_highlight_theme: iced::highlighter::Theme,
 
-    pub patch_mod: Option<Arc<(ContentPackage<Regular>, ModManifest)>>,
+    pub patch_mod_path: Option<PathBuf>,
+    pub patch_mod: Option<(ContentPackage<Regular>, ModManifest)>,
 }
 
 impl App {
@@ -323,7 +326,8 @@ impl App {
                                             .height(Length::Fill)
                                             .on_action(Message::Conflict2EditorAction)
                                             .highlight("xml", self.xml_highlight_theme,)
-                                    ]
+                                    ],
+                                    row![button("Save").on_press(Message::ConflictSavePressed), button("Resolve").on_press(Message::ConflictResolvePressed)]
                                 ]
                                 .width(Length::FillPortion(5)),
                             )
@@ -422,6 +426,9 @@ impl App {
                 let Some(selected_conflict_index) = &self.selected_conflict_index else {
                     return Task::none();
                 };
+                let Some(patch_mod_path) = &self.patch_mod_path else {
+                    return Task::none();
+                };
                 let selected_conflicts =
                     self.selected_conflict_type.get_conflict_by_type(conflicts);
                 let mut sorted_conflicts = selected_conflicts.iter().collect::<Vec<_>>();
@@ -439,6 +446,42 @@ impl App {
                     .expect(
                         "Selected conflict was not found in the files! This is a developer error! If you know what causes this, please open an issue on https://github.com/FoLZer/barotrauma_conflict_finder/issues",
                     );
+
+                //Just opened a conflict (both text editors uninitialized)
+                if self.selected_conflict_file_index.is_none() {
+                    //This code is to initialize working file for editor2
+                    let folder_path = patch_mod_path
+                        .join("files")
+                        .join(self.selected_conflict_type.to_string());
+                    if !folder_path.exists() {
+                        std::fs::create_dir_all(&folder_path)
+                            .expect("Failed to create directories in a patch mod");
+                    }
+                    let file_path = folder_path.join(conflict.0);
+                    let text = if file_path.exists() {
+                        std::fs::read_to_string(file_path)
+                            .expect("Failed to read text from a patch file")
+                    } else {
+                        let n = self.selected_conflict_type.get_prefab_name();
+                        format!(
+                            "<{}>
+    <Override>
+
+    </Override>
+</{}>",
+                            n, n
+                        )
+                    };
+
+                    //TODO: check if previous file was saved?
+                    self.conflict2_text.perform(text_editor::Action::SelectAll);
+                    self.conflict2_text.perform(text_editor::Action::Edit(
+                        text_editor::Edit::Paste(Arc::new(text)),
+                    ));
+                    self.conflict2_text.perform(text_editor::Action::Move(
+                        text_editor::Motion::DocumentStart,
+                    ));
+                }
 
                 let text = std::fs::read_to_string(file_path).unwrap();
 
@@ -458,7 +501,7 @@ impl App {
                 self.xml_highlight_theme = theme;
             }
             Message::PatchModLoaded(patch_mod_package) => {
-                self.patch_mod = Some(patch_mod_package);
+                self.patch_mod = Some(Arc::into_inner(patch_mod_package).expect("There's supposed to be only 1 reference to patch mod at the point of transfering to the app state"));
             }
             Message::PatchModPathChanged(s) => {
                 self.args.patch_mod_path = Some(s);
@@ -476,6 +519,7 @@ impl App {
                     std::fs::create_dir_all(&patch_mod_path)
                         .expect("Failed to create directories for patch mod");
                 }
+                self.patch_mod_path = Some(patch_mod_path.clone());
                 let patch_mod_filelist_path = patch_mod_path.join("filelist.xml");
                 let patch_mod_manifest_path = patch_mod_path.join("manifest.json");
 
@@ -526,6 +570,63 @@ impl App {
                 return Task::done(Message::PatchModLoaded(Arc::new((package, manifest))))
                     .chain(Task::done(Message::ScreenChanged(Screen::ConflictSolver)));
             }
+            Message::ConflictSavePressed => {
+                let Some(LoadingState::Finished(loaded_content_files, conflicts)) =
+                    &self.loading_state
+                else {
+                    return Task::none();
+                };
+                let Some(selected_conflict_index) = &self.selected_conflict_index else {
+                    return Task::none();
+                };
+                let Some(patch_mod_path) = &self.patch_mod_path else {
+                    return Task::none();
+                };
+                let Some((patch_mod, manifest)) = &mut self.patch_mod else {
+                    return Task::none();
+                };
+                let selected_conflicts =
+                    self.selected_conflict_type.get_conflict_by_type(conflicts);
+                let mut sorted_conflicts = selected_conflicts.iter().collect::<Vec<_>>();
+                sorted_conflicts.sort_by(|a, b| a.0.cmp(b.0));
+
+                let conflict = &sorted_conflicts[*selected_conflict_index];
+
+
+                let file_path = format!("files/{}/{}.xml", self.selected_conflict_type.to_string(), conflict.0);
+
+                std::fs::write(patch_mod_path.join(&file_path), self.conflict2_text.text())
+                    .expect("Failed to write patch file");
+
+                let file_paths = self
+                    .selected_conflict_type
+                    .get_mut_conflict_file_paths_by_type(&mut patch_mod.file_paths);
+
+                let file_path_str = format!("%ModDir%/{}", file_path);
+                if !file_paths.contains(&file_path_str) {
+                    file_paths.push(file_path_str);
+                    let patch_mod_filelist_path = patch_mod_path.join("filelist.xml");
+                    patch_mod
+                        .save(&patch_mod_filelist_path)
+                        .expect("Failed to save Patch Mod filelist.xml");
+                }
+
+                manifest.in_progress_conflicts.entry(self.selected_conflict_type).or_default().insert(ConflictStoreData {
+                    identifier: conflict.0.clone(),
+                    conflict_between: conflict.1.added_by.iter().map(|v| {
+                        let v = v.package_id_prefer_ugc_id();
+                        manifest.dependencies.iter().find(|d| d.identifier == v).expect("Invalid mod manifest: mod used in a conflict was not found in this mod's dependencies").clone()
+                    }).collect()
+                });
+
+                let patch_mod_manifest_path = patch_mod_path.join("manifest.json");
+                manifest
+                    .save(&patch_mod_manifest_path)
+                    .expect("Failed to save Patch Mod manifest.json");
+            }
+            Message::ConflictResolvePressed => {
+                todo!()
+            }
         }
         Task::none()
     }
@@ -575,6 +676,7 @@ fn main() -> iced::Result {
                 conflict2_text: Default::default(),
                 xml_highlight_theme: iced::highlighter::Theme::SolarizedDark,
                 patch_mod: None,
+                patch_mod_path: None,
             };
             (state, Task::none())
         })
