@@ -21,6 +21,8 @@ glam = "*"
 chrono = "*"
 lazy_static = "*"
 derive_builder = "*"
+serde = { version = "*", features = ["derive"] }
+quick-xml = "0.37.2"
 
-#remove in future, used in EventSet to determine an identifier until it's been implemented
+#TODO: remove in future, used in EventSet to determine an identifier until it's been implemented
 rand = "*"

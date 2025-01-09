@@ -1,4 +1,4 @@
-use std::{num::ParseIntError, str::FromStr};
+use std::{fmt::Display, num::ParseIntError, str::FromStr};
 
 #[derive(Debug, Clone)]
 pub struct Version {
@@ -40,6 +40,18 @@ impl FromStr for Version {
             build,
             revision,
         })
+    }
+}
+
+impl Display for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Some(build) = self.build else {
+            return write!(f, "{}.{}", self.major, self.minor);
+        };
+        let Some(revision) = self.revision else {
+            return write!(f, "{}.{}.{}", self.major, self.minor, build);
+        };
+        write!(f, "{}.{}.{}.{}", self.major, self.minor, build, revision)
     }
 }
 

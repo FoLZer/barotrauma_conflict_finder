@@ -4,6 +4,7 @@ use iced::stream::try_channel;
 use log::{info, trace, warn};
 use paste::paste;
 use roxmltree::Document;
+use serde::{Deserialize, Serialize};
 use strum::EnumIter;
 
 use std::{
@@ -366,7 +367,7 @@ macro_rules! build_conflict_type_enum {
     (
         $( $item_name: ident, $display_name: literal, $content_file: ident, $overridable_field: ident, $field_name: ident );*
     ) => {
-        #[derive(EnumIter, Clone, Copy, PartialEq, Eq, Debug)]
+        #[derive(EnumIter, Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize, Hash)]
         pub enum ConflictType {
             $(
                 $item_name,

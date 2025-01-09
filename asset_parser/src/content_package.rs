@@ -1,4 +1,8 @@
-use std::{marker::PhantomData, path::PathBuf};
+use std::{
+    io::Cursor,
+    marker::PhantomData,
+    path::{Path, PathBuf},
+};
 
 use regex::RegexBuilder;
 use roxmltree::{Document, Node};
@@ -146,6 +150,19 @@ impl AnyContentPackage {
         self.name()
             .clone()
             .unwrap_or_else(|| self.steam_workshop_id().unwrap().to_string())
+    }
+
+    pub fn package_id_prefer_ugc_id(&self) -> String {
+        self.steam_workshop_id()
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| self.name().clone().unwrap())
+    }
+
+    pub fn expected_hash(&self) -> &Option<String> {
+        match self {
+            AnyContentPackage::Core(content_package) => &content_package.expected_hash,
+            AnyContentPackage::Regular(content_package) => &content_package.expected_hash,
+        }
     }
 }
 
@@ -441,6 +458,108 @@ impl<T: ContentPackageType> ContentPackage<T> {
         );
 
         files
+    }
+
+    pub fn save(&self, path: &Path) -> Result<(), std::io::Error> {
+        let mut writer = quick_xml::Writer::new(Cursor::new(Vec::new()));
+
+        let mut root = writer.create_element("contentpackage");
+        if let Some(attr) = &self.name {
+            root = root.with_attribute(("name", attr.as_str()));
+        }
+        root = root.with_attribute(("corepackage", match T::IS_CORE {
+            true => "true",
+            false => "false",
+        }));
+        if let Some(attr) = &self.game_version {
+            root = root.with_attribute(("gameversion", attr.to_string().as_str()));
+        }
+        if let Some(attr) = &self.alt_names {
+            root = root.with_attribute(("altnames", attr.join(",").as_str()));
+        }
+        if let Some(attr) = &self.steam_workshop_id {
+            root = root.with_attribute(("steamworkshopid", attr.to_string().as_str()));
+        }
+        if let Some(attr) = &self.mod_version {
+            root = root.with_attribute(("modversion", attr.as_str()));
+        }
+
+        //TODO: Should never see this during development or in workshop as this is added by barotrauma when the mod is installed in a different folder, but probably nice to have anyway
+        //if let Some(attr) = &self.install_time {
+        //    root = root.with_attribute(("installtime", attr.as_str()));
+        //}
+
+        if let Some(attr) = &self.expected_hash {
+            root = root.with_attribute(("expectedhash", attr.as_str()));
+        }
+
+        root.write_inner_content(|writer| {
+            macro_rules! inner_content {
+                (
+                    $from: expr,
+                    $($elem_name: literal, $field: ident);*
+                ) => {
+                    $(
+                        for path in &$from.$field {
+                            let el = writer.create_element($elem_name).with_attribute(("file", path.as_str()));
+                            el.write_empty()?;
+                        }
+                    )*
+                };
+            }
+
+            inner_content!(
+                &self.file_paths,
+
+                "Item", items;
+                "Text", texts;
+                "Submarine", submarines;
+                "Outpost", outposts;
+                "OutpostModule", outpost_modules;
+                "Wreck", wrecks;
+                "BeaconStation", beacon_stations;
+                "EnemySubmarine", enemy_submarines;
+                "NPCConversations", npc_conversations;
+                "ItemAssembly", item_assemblies;
+                "Talents", talents;
+                "NPCSets", npc_sets;
+                "Character", characters;
+                "Slideshows", slideshows;
+                "TalentTrees", talent_trees;
+                "LevelGenerationParameters", level_generation_parameters;
+                "BallastFlora", ballast_flora;
+                "StartItems", start_items;
+                "LevelObjectPrefabs", level_object_prefabs;
+                "Afflictions", afflictions;
+                "RandomEvents", random_events;
+                "Structure", structures;
+                "UIStyle", ui_styles;
+                "UpgradeModules", upgrade_modules;
+                "RuinConfig", ruin_configs;
+                "OutpostConfig", outpost_configs;
+                "WreckAIConfig", wreck_ai_configs;
+                "MapGenerationParameters", map_generation_params;
+                "CaveGenerationParameters", cave_generation_params;
+                "BackgroundCreaturePrefabs", background_creature_prefabs;
+                "Particles", particle_prefabs;
+                "EventManagerSettings", event_manager_settings;
+                "NPCPersonalityTraits", npc_personality_traits;
+                "Jobs", jobs;
+                "Corpses", corpse_prefabs;
+                "Sounds", sound_prefabs;
+                "Decals", decal_prefabs;
+                "LocationTypes", location_types;
+                "Missions", mission_prefabs;
+                "Orders", order_prefabs;
+                "SkillSettings", skill_settings;
+                "Factions", faction_prefabs;
+                "Tutorials", tutorial_prefabs
+            );
+
+            Ok(())
+        })?;
+
+        std::fs::write(path, writer.into_inner().into_inner())
     }
 }
 

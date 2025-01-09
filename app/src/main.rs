@@ -17,6 +17,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
 pub mod logger;
+pub mod manifest;
 
 use std::{path::PathBuf, sync::Arc};
 
@@ -37,6 +38,7 @@ use iced::{
 };
 use log::LevelFilter;
 use logger::SimpleLogger;
+use manifest::{ModIdentifier, ModManifest};
 use strum::IntoEnumIterator;
 
 const CURRENT_GAME_VERSION: Version = Version {
@@ -93,7 +95,9 @@ pub enum Message {
     ConflictButtonPressed(usize),
     ConflictFileButtonPressed(usize),
     XMLHighlighterThemeSelected(iced::highlighter::Theme),
-    PatchModLoaded(Arc<ContentPackage<Regular>>),
+    PatchModLoaded(Arc<(ContentPackage<Regular>, ModManifest)>),
+    LoadPatchMod,
+    PatchModPathChanged(String),
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
@@ -125,7 +129,7 @@ struct App {
 
     pub xml_highlight_theme: iced::highlighter::Theme,
 
-    pub patch_mod: Option<Arc<ContentPackage<Regular>>>,
+    pub patch_mod: Option<Arc<(ContentPackage<Regular>, ModManifest)>>,
 }
 
 impl App {
@@ -196,7 +200,7 @@ impl App {
                         row![
                             text!("Patch Mod Path:"),
                             text_input("", &self.args.patch_mod_path().to_str().expect("encountered non UTF-8 text in patch mod path, these are not compatible!"))
-                                .on_input(Message::ConfigPathChanged)
+                                .on_input(Message::PatchModPathChanged)
                         ],
                         text!("Patch Mod will be loaded once the mods are parsed"),
                         row![
@@ -376,34 +380,9 @@ impl App {
 
                 let task = Task::stream(asset_parser::loading::load(game_path, config_player_path));
 
-                let patch_mod_path = self.args.patch_mod_path().join("filelist.xml");
-                if !patch_mod_path.exists() {
-                    log::info!("Patch Mod doesn't exist on the path provided, it will be created.");
-                    std::fs::create_dir_all(&patch_mod_path)
-                        .expect("Failed to create directories for patch mod");
-                }
-                let patch_mod_filelist_path = patch_mod_path.join("filelist.xml");
-
                 return Task::done(Message::ScreenChanged(Screen::LoadingMods))
                     .chain(task.map(|progress| Message::LoadProgress(progress)))
-                    .chain(Task::perform(
-                        async move {
-                            if !patch_mod_filelist_path.exists() {
-                                log::info!("Patch Mod's filelist.xml does not exist, it will be created from scratch.");
-                                let mut package = ContentPackage::<Regular>::default();
-                                package.name = Some("Conflict Finder Patch Mod".to_owned());
-                                package.game_version = Some(CURRENT_GAME_VERSION);
-                                return package;
-                            }
-                            ContentPackage::<Regular>::load(
-                                &std::fs::read_to_string(patch_mod_filelist_path)
-                                    .expect("Failed to load patchmod filelist.xml"),
-                            )
-                            .expect("Failed to parse patchmod filelist.xml")
-                        },
-                        |v| Message::PatchModLoaded(Arc::new(v)),
-                    ))
-                    .chain(Task::done(Message::ScreenChanged(Screen::ConflictSolver)));
+                    .chain(Task::done(Message::LoadPatchMod));
             }
             Message::LoadProgress(progress) => match progress {
                 Ok(progress) => {
@@ -476,6 +455,72 @@ impl App {
             }
             Message::PatchModLoaded(patch_mod_package) => {
                 self.patch_mod = Some(patch_mod_package);
+            }
+            Message::PatchModPathChanged(s) => {
+                self.args.patch_mod_path = Some(s);
+            }
+            Message::LoadPatchMod => {
+                let Some(LoadingState::Finished(loaded_content_files, conflicts)) =
+                    &self.loading_state
+                else {
+                    return Task::none();
+                };
+
+                let patch_mod_path = self.args.patch_mod_path();
+                if !patch_mod_path.exists() {
+                    log::info!("Patch Mod doesn't exist on the path provided, it will be created.");
+                    std::fs::create_dir_all(&patch_mod_path)
+                        .expect("Failed to create directories for patch mod");
+                }
+                let patch_mod_filelist_path = patch_mod_path.join("filelist.xml");
+                let patch_mod_manifest_path = patch_mod_path.join("manifest.json");
+
+                let (package, manifest) = if !patch_mod_filelist_path.exists() {
+                    log::info!(
+                        "Patch Mod's filelist.xml does not exist, it will be created from scratch."
+                    );
+                    let mut package = ContentPackage::<Regular>::default();
+                    package.name = Some("Conflict Finder Patch Mod".to_owned());
+                    package.game_version = Some(CURRENT_GAME_VERSION);
+
+                    let manifest = ModManifest {
+                        dependencies: loaded_content_files.iter().map(|f| Arc::new(ModIdentifier {
+                            identifier: f.0.package_id_prefer_ugc_id(),
+                            mod_hash: match f.0.expected_hash() {
+                                Some(v) => Some(v.clone()),
+                                None => {
+                                    log::warn!("Mod {} doesn't have an expected hash, changes in this mod will not be detected! (The conflict resolutions relying on this mod will never be unresolved)", f.0.package_id());
+                                    None
+                                }
+                            }
+                        })).collect(),
+                        ..Default::default()
+                    };
+
+                    package.save(&patch_mod_filelist_path).unwrap();
+                    manifest.save(&patch_mod_manifest_path).unwrap();
+
+                    (package, manifest)
+                } else {
+                    if !patch_mod_manifest_path.exists() {
+                        log::error!(
+                            "Patch Mod's manifest.json does not exist, the Patch Mod is invalid without one!"
+                        );
+                        panic!();
+                    }
+                    let package = ContentPackage::<Regular>::load(
+                        &std::fs::read_to_string(patch_mod_filelist_path)
+                            .expect("Failed to load patchmod filelist.xml"),
+                    )
+                    .expect("Failed to parse patchmod filelist.xml");
+
+                    let manifest = ModManifest::load(&patch_mod_manifest_path).unwrap();
+
+                    (package, manifest)
+                };
+
+                return Task::done(Message::PatchModLoaded(Arc::new((package, manifest))))
+                    .chain(Task::done(Message::ScreenChanged(Screen::ConflictSolver)));
             }
         }
         Task::none()
