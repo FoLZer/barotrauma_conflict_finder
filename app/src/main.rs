@@ -4,8 +4,7 @@ Copyright (C) 2025  FoLZer
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; version 2
-of the License.
+as published by the Free Software Foundation; version 2.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -21,14 +20,18 @@ pub mod logger;
 
 use std::{path::PathBuf, sync::Arc};
 
-use asset_parser::loading::{ConflictType, LoadingState};
+use asset_parser::{
+    content_package::{ContentPackage, Regular},
+    loading::{ConflictType, LoadingState},
+    shared::version::Version,
+};
 use clap::Parser;
 use iced::{
     Element, Length, Subscription, Task,
     futures::{SinkExt, Stream, StreamExt, channel::mpsc::UnboundedReceiver, lock::Mutex},
     stream,
     widget::{
-        Column, Row, button, column, container, pick_list, radio, row, scrollable, text,
+        Column, Row, Space, button, column, container, pick_list, radio, row, scrollable, text,
         text_editor, text_input,
     },
 };
@@ -36,11 +39,19 @@ use log::LevelFilter;
 use logger::SimpleLogger;
 use strum::IntoEnumIterator;
 
+const CURRENT_GAME_VERSION: Version = Version {
+    major: 1,
+    minor: 7,
+    build: Some(7),
+    revision: Some(0),
+};
+
 #[derive(Parser)]
 struct Args {
     #[arg(default_value = r#"C:\Program Files (x86)\Steam\steamapps\common\Barotrauma"#)]
     game_path: String,
     config_player_path: Option<String>,
+    patch_mod_path: Option<String>,
 }
 
 impl Args {
@@ -49,6 +60,15 @@ impl Args {
             .as_ref()
             .map(|v| PathBuf::from(v.clone()))
             .unwrap_or_else(|| PathBuf::from(self.game_path.clone()).join("config_player.xml"))
+    }
+
+    pub fn patch_mod_path(&self) -> PathBuf {
+        self.patch_mod_path
+            .as_ref()
+            .map(|v| PathBuf::from(v.clone()))
+            .unwrap_or_else(|| {
+                PathBuf::from(self.game_path.clone()).join(r#"LocalMods\conflict_finder_patchmod"#)
+            })
     }
 }
 
@@ -72,6 +92,8 @@ pub enum Message {
     ConflictTypeSelected(ConflictType),
     ConflictButtonPressed(usize),
     ConflictFileButtonPressed(usize),
+    XMLHighlighterThemeSelected(iced::highlighter::Theme),
+    PatchModLoaded(Arc<ContentPackage<Regular>>),
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
@@ -100,6 +122,10 @@ struct App {
 
     pub conflict1_text: text_editor::Content,
     pub conflict2_text: text_editor::Content,
+
+    pub xml_highlight_theme: iced::highlighter::Theme,
+
+    pub patch_mod: Option<Arc<ContentPackage<Regular>>>,
 }
 
 impl App {
@@ -166,7 +192,21 @@ impl App {
                             text!("Config Path (Optional):"),
                             text_input("", self.args.config_player_path.as_ref().map_or("", |v| v))
                                 .on_input(Message::ConfigPathChanged)
-                        ]
+                        ],
+                        row![
+                            text!("Patch Mod Path:"),
+                            text_input("", &self.args.patch_mod_path().to_str().expect("encountered non UTF-8 text in patch mod path, these are not compatible!"))
+                                .on_input(Message::ConfigPathChanged)
+                        ],
+                        text!("Patch Mod will be loaded once the mods are parsed"),
+                        row![
+                            text!("Xml Highlighter Theme:"),
+                            pick_list(
+                                iced::highlighter::Theme::ALL,
+                                Some(self.xml_highlight_theme),
+                                Message::XMLHighlighterThemeSelected
+                            ),
+                        ],
                     ]
                     .into()
                 }
@@ -204,66 +244,86 @@ impl App {
                     let mut sorted_conflicts = selected_conflicts.iter().collect::<Vec<_>>();
                     sorted_conflicts.sort_by(|a, b| a.0.cmp(b.0));
 
-                    row![container(column![
-                        pick_list(
-                            ConflictType::iter()
-                                .filter(|t| !t.get_conflict_by_type(conflicts).is_empty())
-                                .collect::<Vec<_>>(),
-                            Some(self.selected_conflict_type),
-                            Message::ConflictTypeSelected
-                        ),
-                        scrollable(Column::with_children(
-                            sorted_conflicts
-                                .iter()
-                                .enumerate()
-                                .map(|(i, (identifier, _))| {
-                                    Into::<Element<'_, Message>>::into(
-                                        button(text!("{}", identifier)).on_press_maybe(
-                                            if self.selected_conflict_index.is_none_or(|v| v != i) {
-                                                Some(Message::ConflictButtonPressed(i))
-                                            } else {
-                                                None
-                                            },
-                                        ),
-                                    )
-                                })
-                        ))
-                    ])]
-                    .push_maybe(
+                    row![
+                        container(column![
+                            pick_list(
+                                ConflictType::iter()
+                                    .filter(|t| !t.get_conflict_by_type(conflicts).is_empty())
+                                    .collect::<Vec<_>>(),
+                                Some(self.selected_conflict_type),
+                                Message::ConflictTypeSelected
+                            )
+                            .width(Length::Fill),
+                            scrollable(Column::with_children(
+                                sorted_conflicts
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(i, (identifier, _))| {
+                                        Into::<Element<'_, Message>>::into(
+                                            button(text!("{}", identifier)).on_press_maybe(
+                                                if self
+                                                    .selected_conflict_index
+                                                    .is_none_or(|v| v != i)
+                                                {
+                                                    Some(Message::ConflictButtonPressed(i))
+                                                } else {
+                                                    None
+                                                },
+                                            ),
+                                        )
+                                    })
+                            ))
+                            .width(Length::Fill),
+                        ])
+                        .width(Length::FillPortion(1)),
                         if let Some(selected_conflict_index) = self.selected_conflict_index {
                             let (will_be_loaded_from, conflict_data) =
                                 &sorted_conflicts[selected_conflict_index];
-                            Some(column![
-                                Row::with_children(conflict_data.added_by.iter().enumerate().map(
-                                    |(i, package)| {
-                                        Into::<Element<'_, Message>>::into(
-                                            button(text!("{}", package.package_id()))
-                                                .on_press_maybe(
-                                                    if self
-                                                        .selected_conflict_file_index
-                                                        .is_none_or(|v| v != i)
-                                                    {
-                                                        Some(Message::ConflictFileButtonPressed(i))
-                                                    } else {
-                                                        None
-                                                    },
-                                                ),
+                            Into::<Element<'_, Message>>::into(
+                                column![
+                                    scrollable(Row::with_children(
+                                        conflict_data.added_by.iter().enumerate().map(
+                                            |(i, package)| {
+                                                Into::<Element<'_, Message>>::into(
+                                                    button(text!("{}", package.package_id()))
+                                                        .on_press_maybe(
+                                                            if self
+                                                                .selected_conflict_file_index
+                                                                .is_none_or(|v| v != i)
+                                                            {
+                                                                Some(
+                                                                Message::ConflictFileButtonPressed(
+                                                                    i,
+                                                                ),
+                                                            )
+                                                            } else {
+                                                                None
+                                                            },
+                                                        ),
+                                                )
+                                            },
                                         )
-                                    },
-                                )),
-                                row![
-                                    text_editor(&self.conflict1_text)
-                                        .height(Length::Fill)
-                                        .on_action(Message::Conflict1EditorAction),
-                                    text_editor(&self.conflict2_text)
-                                        .height(Length::Fill)
-                                        .on_action(Message::Conflict2EditorAction)
+                                    ))
+                                    .direction(
+                                        scrollable::Direction::Horizontal(Default::default())
+                                    ),
+                                    row![
+                                        text_editor(&self.conflict1_text)
+                                            .height(Length::Fill)
+                                            .on_action(Message::Conflict1EditorAction)
+                                            .highlight("xml", self.xml_highlight_theme,),
+                                        text_editor(&self.conflict2_text)
+                                            .height(Length::Fill)
+                                            .on_action(Message::Conflict2EditorAction)
+                                            .highlight("xml", self.xml_highlight_theme,)
+                                    ]
                                 ]
-                            ])
+                                .width(Length::FillPortion(5)),
+                            )
                         } else {
-                            None
-                        },
-                    )
+                            Space::new(Length::FillPortion(5), Length::Fill).into()
+                        }
+                    ]
                     .into()
                 }
             })
@@ -316,8 +376,33 @@ impl App {
 
                 let task = Task::stream(asset_parser::loading::load(game_path, config_player_path));
 
+                let patch_mod_path = self.args.patch_mod_path().join("filelist.xml");
+                if !patch_mod_path.exists() {
+                    log::info!("Patch Mod doesn't exist on the path provided, it will be created.");
+                    std::fs::create_dir_all(&patch_mod_path)
+                        .expect("Failed to create directories for patch mod");
+                }
+                let patch_mod_filelist_path = patch_mod_path.join("filelist.xml");
+
                 return Task::done(Message::ScreenChanged(Screen::LoadingMods))
                     .chain(task.map(|progress| Message::LoadProgress(progress)))
+                    .chain(Task::perform(
+                        async move {
+                            if !patch_mod_filelist_path.exists() {
+                                log::info!("Patch Mod's filelist.xml does not exist, it will be created from scratch.");
+                                let mut package = ContentPackage::<Regular>::default();
+                                package.name = Some("Conflict Finder Patch Mod".to_owned());
+                                package.game_version = Some(CURRENT_GAME_VERSION);
+                                return package;
+                            }
+                            ContentPackage::<Regular>::load(
+                                &std::fs::read_to_string(patch_mod_filelist_path)
+                                    .expect("Failed to load patchmod filelist.xml"),
+                            )
+                            .expect("Failed to parse patchmod filelist.xml")
+                        },
+                        |v| Message::PatchModLoaded(Arc::new(v)),
+                    ))
                     .chain(Task::done(Message::ScreenChanged(Screen::ConflictSolver)));
             }
             Message::LoadProgress(progress) => match progress {
@@ -333,11 +418,17 @@ impl App {
             Message::ConflictTypeSelected(t) => {
                 self.selected_conflict_file_index = None;
                 self.selected_conflict_index = None;
-                self.selected_conflict_type = t
+                self.selected_conflict_type = t;
+                self.conflict1_text.perform(text_editor::Action::SelectAll);
+                self.conflict1_text
+                    .perform(text_editor::Action::Edit(text_editor::Edit::Backspace));
             }
             Message::ConflictButtonPressed(i) => {
                 self.selected_conflict_file_index = None;
                 self.selected_conflict_index = Some(i);
+                self.conflict1_text.perform(text_editor::Action::SelectAll);
+                self.conflict1_text
+                    .perform(text_editor::Action::Edit(text_editor::Edit::Backspace));
             }
             Message::ConflictFileButtonPressed(i) => {
                 let Some(LoadingState::Finished(loaded_content_files, conflicts)) =
@@ -369,8 +460,6 @@ impl App {
                 let text = std::fs::read_to_string(file_path).unwrap();
 
                 self.conflict1_text.perform(text_editor::Action::SelectAll);
-                //self.conflict1_text
-                //    .perform(text_editor::Action::Edit(text_editor::Edit::Backspace));
                 self.conflict1_text
                     .perform(text_editor::Action::Edit(text_editor::Edit::Paste(
                         Arc::new(text),
@@ -381,6 +470,12 @@ impl App {
                 ));
 
                 self.selected_conflict_file_index = Some(i)
+            }
+            Message::XMLHighlighterThemeSelected(theme) => {
+                self.xml_highlight_theme = theme;
+            }
+            Message::PatchModLoaded(patch_mod_package) => {
+                self.patch_mod = Some(patch_mod_package);
             }
         }
         Task::none()
@@ -429,6 +524,8 @@ fn main() -> iced::Result {
                 selected_conflict_file_index: None,
                 conflict1_text: Default::default(),
                 conflict2_text: Default::default(),
+                xml_highlight_theme: iced::highlighter::Theme::SolarizedDark,
+                patch_mod: None,
             };
             (state, Task::none())
         })

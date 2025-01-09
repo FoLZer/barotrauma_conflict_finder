@@ -10,10 +10,10 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Core;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Regular;
 
 pub trait ContentPackageType: Sync + Send {
@@ -149,7 +149,7 @@ impl AnyContentPackage {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ContentPackage<T: ContentPackageType> {
     //attributes
     pub name: Option<String>,

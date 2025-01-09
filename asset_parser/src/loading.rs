@@ -52,7 +52,12 @@ macro_rules! detect_conflict {
                     }
                     std::collections::hash_map::Entry::Vacant(vacant_entry) => {
                         vacant_entry.insert(IdCheck {
-                            was_overriden: false,
+                            was_overriden: if (item.is_override) {
+                                warn!("[{}] id {} is overriding but nothing under this id was loaded before, is this a mistake in load order?", $item_name, identifier);
+                                true
+                            } else {
+                                false
+                            },
                             added_by: vec![$package.clone()]
                         });
                     }
@@ -304,7 +309,12 @@ pub fn load(
             "Faction Prefabs",faction_prefabs,faction_prefabs,faction_prefabs_faction_prefabs;
             "Tutorial Prefabs",tutorial_prefabs,tutorial_prefabs,tutorial_prefabs_tutorial_prefabs
         );
-        let _ = output.send(Progress::Finished(Arc::new(loaded_content_files), Arc::new(conflicts))).await;
+        let _ = output
+            .send(Progress::Finished(
+                Arc::new(loaded_content_files),
+                Arc::new(conflicts),
+            ))
+            .await;
         Ok(())
     })
 }
@@ -440,9 +450,15 @@ build_conflict_type_enum!(
 pub enum Progress {
     ReadingModList,
     LoadingCoreContent,
-    LoadingMods { i: usize, max: usize },
+    LoadingMods {
+        i: usize,
+        max: usize,
+    },
     LoadingConflicts,
-    Finished(Arc<Vec<(Arc<AnyContentPackage>, ContentFiles)>>, Arc<Conflicts>),
+    Finished(
+        Arc<Vec<(Arc<AnyContentPackage>, ContentFiles)>>,
+        Arc<Conflicts>,
+    ),
 }
 
 #[derive(Debug)]
@@ -455,9 +471,15 @@ pub enum LoadingState {
     Started,
     ReadingModList,
     LoadingCoreContent,
-    LoadingMods { i: usize, max: usize },
+    LoadingMods {
+        i: usize,
+        max: usize,
+    },
     LoadingConflicts,
-    Finished(Arc<Vec<(Arc<AnyContentPackage>, ContentFiles)>>, Arc<Conflicts>),
+    Finished(
+        Arc<Vec<(Arc<AnyContentPackage>, ContentFiles)>>,
+        Arc<Conflicts>,
+    ),
 }
 
 impl From<Progress> for LoadingState {
@@ -467,7 +489,9 @@ impl From<Progress> for LoadingState {
             Progress::LoadingCoreContent => Self::LoadingCoreContent,
             Progress::LoadingMods { i, max } => Self::LoadingMods { i, max },
             Progress::LoadingConflicts => Self::LoadingConflicts,
-            Progress::Finished(content_files, conflicts) => Self::Finished(content_files, conflicts),
+            Progress::Finished(content_files, conflicts) => {
+                Self::Finished(content_files, conflicts)
+            }
         }
     }
 }

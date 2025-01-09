@@ -67,7 +67,7 @@ impl SubmarineAsset {
         Ok(SubmarineAsset {
             sub: SubmarineFile::from_xml(document.root_element()),
             hash,
-            file_path
+            file_path,
         })
     }
 }

@@ -1,7 +1,9 @@
 [package]
 name = "asset_parser"
 version = "0.1.0"
+authors = ["FoLZer"]
 edition = "2024"
+license = "GPL-2.0-only"
 
 [dependencies]
 roxmltree = "*"
