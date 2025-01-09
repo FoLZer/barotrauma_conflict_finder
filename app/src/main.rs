@@ -457,7 +457,7 @@ impl App {
                         std::fs::create_dir_all(&folder_path)
                             .expect("Failed to create directories in a patch mod");
                     }
-                    let file_path = folder_path.join(conflict.0);
+                    let file_path = folder_path.join(format!("{}.xml", conflict.0));
                     let text = if file_path.exists() {
                         std::fs::read_to_string(file_path)
                             .expect("Failed to read text from a patch file")
@@ -532,7 +532,7 @@ impl App {
                     package.game_version = Some(CURRENT_GAME_VERSION);
 
                     let manifest = ModManifest {
-                        dependencies: loaded_content_files.iter().map(|f| Arc::new(ModIdentifier {
+                        dependencies: loaded_content_files.iter().map(|f| Arc::new(std::sync::Mutex::new(ModIdentifier {
                             identifier: f.0.package_id_prefer_ugc_id(),
                             mod_hash: match f.0.expected_hash() {
                                 Some(v) => Some(v.clone()),
@@ -541,7 +541,7 @@ impl App {
                                     None
                                 }
                             }
-                        })).collect(),
+                        }))).collect(),
                         ..Default::default()
                     };
 
@@ -563,6 +563,19 @@ impl App {
                     .expect("Failed to parse patchmod filelist.xml");
 
                     let manifest = ModManifest::load(&patch_mod_manifest_path).unwrap();
+
+                    if let Err(e) = manifest.detect_mod_changes(loaded_content_files) {
+                        match e {
+                            manifest::ModChangeDetectError::ModChangesDetected(mods) => todo!(),
+                            manifest::ModChangeDetectError::ExpectedModNotLoaded(identifier) => {
+                                log::error!(
+                                    "Mod specified in Patch Mod dependencies was not enabled/found: {}, most likely you will need to remake the Patch Mod or add the dependency back",
+                                    identifier
+                                );
+                                return Task::done(Message::ScreenChanged(Screen::Logs));
+                            }
+                        }
+                    }
 
                     (package, manifest)
                 };
@@ -592,8 +605,11 @@ impl App {
 
                 let conflict = &sorted_conflicts[*selected_conflict_index];
 
-
-                let file_path = format!("files/{}/{}.xml", self.selected_conflict_type.to_string(), conflict.0);
+                let file_path = format!(
+                    "files/{}/{}.xml",
+                    self.selected_conflict_type.to_string(),
+                    conflict.0
+                );
 
                 std::fs::write(patch_mod_path.join(&file_path), self.conflict2_text.text())
                     .expect("Failed to write patch file");
@@ -615,7 +631,7 @@ impl App {
                     identifier: conflict.0.clone(),
                     conflict_between: conflict.1.added_by.iter().map(|v| {
                         let v = v.package_id_prefer_ugc_id();
-                        manifest.dependencies.iter().find(|d| d.identifier == v).expect("Invalid mod manifest: mod used in a conflict was not found in this mod's dependencies").clone()
+                        manifest.dependencies.iter().find(|d| d.lock().unwrap().identifier == v).expect("Invalid mod manifest: mod used in a conflict was not found in this mod's dependencies").clone()
                     }).collect()
                 });
 
